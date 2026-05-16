@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
-data/faiss_index/
-data/metadata.json
+# data/faiss_index/
+# data/metadata.json
 data/raw/
 .pytest_cache/

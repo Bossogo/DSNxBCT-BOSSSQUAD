@@ -67,7 +67,7 @@ Add a CLI flag --full to disable the cap for final submission.
 ### LAYER 3: GENERATION LAYER
 
 - Use the Groq Python SDK to call the LLM
-- Model to use: "llama3-70b-8192"
+- Model to use: "llama-3.3-70b-versatile"
 - Build a structured prompt using the retrieved reviews and user summary
 - The system prompt must establish the agent's role
 - The user prompt must include:
@@ -154,7 +154,18 @@ Returns:
 "simulated_review": "...",
 "predicted_rating": 3.5,
 "confidence": "high",
-"retrieved_reviews_used": 5,
+"retrieved_reviews_used": [
+  {
+    "item_name": "Mega Chicken Ikeja",
+    "item_category": "Fast Food",
+    "review_text": "Good fast food but extremely overpriced for what you get.",
+    "rating": 3.0,
+    "platform": "yelp",
+    "item_metadata": {
+      "location": "Lagos"
+    }
+  }
+],
 "user_profile": {
 "mean_rating": 3.2,
 "typical_review_length": "short",

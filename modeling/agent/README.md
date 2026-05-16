@@ -1,4 +1,5 @@
 # Task A: User Modeling Agent
+
 ### DSN x BCT LLM Agent Challenge
 
 An agent that simulates how a specific user would review an unseen item,
@@ -107,7 +108,18 @@ Example response:
   "simulated_review": "The jollof rice was decent but for that price you expect more...",
   "predicted_rating": 3.5,
   "confidence": "high",
-  "retrieved_reviews_used": 5,
+  "retrieved_reviews_used": [
+    {
+      "item_name": "Mega Chicken Ikeja",
+      "item_category": "Fast Food",
+      "review_text": "Good fast food but extremely overpriced for what you get.",
+      "rating": 3.0,
+      "platform": "yelp",
+      "item_metadata": {
+        "location": "Lagos"
+      }
+    }
+  ],
   "user_profile": {
     "mean_rating": 3.2,
     "std_rating": 0.8,
@@ -122,23 +134,23 @@ Example response:
 
 ## Endpoints
 
-| Method | Endpoint     | Description                          |
-|--------|--------------|--------------------------------------|
-| GET    | /platforms   | List available platforms             |
-| GET    | /users       | List users for a platform            |
-| POST   | /simulate    | Simulate a review for a new item     |
+| Method | Endpoint   | Description                      |
+| ------ | ---------- | -------------------------------- |
+| GET    | /platforms | List available platforms         |
+| GET    | /users     | List users for a platform        |
+| POST   | /simulate  | Simulate a review for a new item |
 
 ---
 
 ## Evaluation Alignment
 
-| Criterion               | How it is addressed                                       |
-|-------------------------|-----------------------------------------------------------|
-| Review Text Quality     | LLaMA 3 70B conditioned on real user history              |
-| Rating Accuracy (RMSE)  | Rating predicted from user tendency + semantic similarity |
-| Behavioural Fidelity    | Retrieved reviews capture tone, themes, length patterns   |
-| Code Reproducibility    | Docker + one-command ingestion                            |
-| Nigerian Contextualisation | `nigerian_context=true` flag on /simulate endpoint    |
+| Criterion                  | How it is addressed                                       |
+| -------------------------- | --------------------------------------------------------- |
+| Review Text Quality        | LLaMA 3 70B conditioned on real user history              |
+| Rating Accuracy (RMSE)     | Rating predicted from user tendency + semantic similarity |
+| Behavioural Fidelity       | Retrieved reviews capture tone, themes, length patterns   |
+| Code Reproducibility       | Docker + one-command ingestion                            |
+| Nigerian Contextualisation | `nigerian_context=true` flag on /simulate endpoint        |
 
 ---
 
@@ -155,6 +167,7 @@ If HuggingFace script-based loaders are unavailable in your `datasets` version, 
 Supported formats: `.parquet`, `.jsonl`, `.json`, `.csv`
 
 Default fallback paths:
+
 - `data/raw/amazon_reviews.jsonl`
 - `data/raw/goodreads_reviews.jsonl`
 

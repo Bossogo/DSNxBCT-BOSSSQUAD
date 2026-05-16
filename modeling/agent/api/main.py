@@ -4,6 +4,7 @@ Wraps the three layers into a clean REST API.
 """
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import sys
@@ -18,6 +19,15 @@ app = FastAPI(
     title="Task A: User Modeling Agent",
     description="Simulates user reviews for unseen items based on their review history.",
     version="1.0.0",
+)
+
+# Enable CORS for local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Initialize layers once at startup
@@ -41,6 +51,14 @@ class ItemInput(BaseModel):
     price_range: Optional[str] = ""
     description: Optional[str] = ""
 
+class RetrievedReview(BaseModel):
+    item_name: str
+    item_category: str
+    review_text: str
+    rating: float
+    platform: str
+    item_metadata: Optional[dict] = {}
+
 class SimulateRequest(BaseModel):
     platform: str
     user_id: str
@@ -52,7 +70,7 @@ class SimulateResponse(BaseModel):
     simulated_review: str
     predicted_rating: float
     confidence: str
-    retrieved_reviews_used: int
+    retrieved_reviews_used: list[RetrievedReview]
     user_profile: dict
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -113,6 +131,6 @@ def simulate(request: SimulateRequest):
         simulated_review=generation_result["simulated_review"],
         predicted_rating=generation_result["predicted_rating"],
         confidence=generation_result["confidence"],
-        retrieved_reviews_used=len(retrieval_result["retrieved_reviews"]),
+        retrieved_reviews_used=retrieval_result["retrieved_reviews"],
         user_profile=retrieval_result["user_profile"],
     )
