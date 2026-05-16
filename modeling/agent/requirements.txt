@@ -1,0 +1,13 @@
+groq
+fastapi
+uvicorn
+faiss-cpu
+sentence-transformers==2.7.0
+torch==2.2.2
+datasets
+transformers==4.41.2
+scikit-learn
+numpy<2
+pandas
+python-dotenv
+huggingface_hub

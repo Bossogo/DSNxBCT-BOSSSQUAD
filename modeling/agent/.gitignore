@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+data/faiss_index/
+data/metadata.json
+data/raw/
+.pytest_cache/
