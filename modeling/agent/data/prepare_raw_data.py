@@ -11,6 +11,7 @@ import gzip
 import json
 import os
 import shutil
+import time
 import urllib.request
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "raw")
@@ -37,47 +38,78 @@ def _open_gzip_stream(path_or_url):
     return gzip.open(path_or_url, "rb"), None
 
 
-def download_amazon_gz_to_jsonl(category, output_path):
+def _convert_gz_source_to_jsonl(
+    gz_source,
+    output_path,
+    parse_json=False,
+    max_retries=3,
+):
+    last_error = None
+    for attempt in range(1, max_retries + 1):
+        tmp_output = f"{output_path}.tmp"
+        if os.path.exists(tmp_output):
+            os.remove(tmp_output)
+
+        stream = None
+        response = None
+        count = 0
+        try:
+            stream, response = _open_gzip_stream(gz_source)
+            with stream, open(tmp_output, "w", encoding="utf-8") as out_f:
+                for raw_line in stream:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line:
+                        continue
+                    if parse_json:
+                        obj = json.loads(line)
+                        out_f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+                    else:
+                        out_f.write(line + "\n")
+                    count += 1
+
+            os.replace(tmp_output, output_path)
+            return count
+        except (EOFError, OSError, json.JSONDecodeError, UnicodeDecodeError) as err:
+            last_error = err
+            if os.path.exists(tmp_output):
+                os.remove(tmp_output)
+            if attempt < max_retries:
+                wait_seconds = attempt * 2
+                print(
+                    f"Attempt {attempt}/{max_retries} failed ({err}). "
+                    f"Retrying in {wait_seconds}s..."
+                )
+                time.sleep(wait_seconds)
+            continue
+        finally:
+            if response is not None:
+                response.close()
+
+    raise RuntimeError(
+        f"Failed to process gzip source after {max_retries} attempts: {last_error}"
+    )
+
+
+def download_amazon_gz_to_jsonl(category, output_path, max_retries=3):
     gz_url = AMAZON_2023_REVIEW_URL_TEMPLATE.format(category=category)
     print(f"Downloading Amazon category '{category}' from: {gz_url}")
-    count = 0
-    stream = None
-    response = None
-    try:
-        stream, response = _open_gzip_stream(gz_url)
-        with stream, open(output_path, "w", encoding="utf-8") as out_f:
-            for raw_line in stream:
-                line = raw_line.decode("utf-8").strip()
-                if not line:
-                    continue
-                out_f.write(line + "\n")
-                count += 1
-    finally:
-        if response is not None:
-            response.close()
-
+    count = _convert_gz_source_to_jsonl(
+        gz_source=gz_url,
+        output_path=output_path,
+        parse_json=False,
+        max_retries=max_retries,
+    )
     print(f"Saved Amazon fallback file: {output_path} ({count} rows)")
 
 
-def convert_goodreads_gz_to_jsonl(gz_source, output_path):
+def convert_goodreads_gz_to_jsonl(gz_source, output_path, max_retries=3):
     print(f"Converting Goodreads gzip source to JSONL: {gz_source}")
-    count = 0
-    stream = None
-    response = None
-    try:
-        stream, response = _open_gzip_stream(gz_source)
-        with stream, open(output_path, "w", encoding="utf-8") as out_f:
-            for raw_line in stream:
-                line = raw_line.decode("utf-8").strip()
-                if not line:
-                    continue
-                obj = json.loads(line)
-                out_f.write(json.dumps(obj, ensure_ascii=False) + "\n")
-                count += 1
-    finally:
-        if response is not None:
-            response.close()
-
+    count = _convert_gz_source_to_jsonl(
+        gz_source=gz_source,
+        output_path=output_path,
+        parse_json=True,
+        max_retries=max_retries,
+    )
     print(f"Saved Goodreads fallback file: {output_path} ({count} rows)")
 
 
@@ -125,6 +157,12 @@ def main():
         default=DEFAULT_GOODREADS_OUTPUT,
         help="Output path for Goodreads jsonl fallback file.",
     )
+    parser.add_argument(
+        "--download-retries",
+        type=int,
+        default=3,
+        help="Number of retries for downloading/processing .json.gz sources.",
+    )
     args = parser.parse_args()
 
     ensure_raw_dir()
@@ -133,6 +171,7 @@ def main():
         download_amazon_gz_to_jsonl(
             category=args.amazon_category,
             output_path=args.amazon_output,
+            max_retries=args.download_retries,
         )
     else:
         print("Skipping Amazon download.")
@@ -140,7 +179,11 @@ def main():
     if args.goodreads_jsonl:
         copy_goodreads_jsonl(args.goodreads_jsonl, args.goodreads_output)
     elif args.goodreads_gz:
-        convert_goodreads_gz_to_jsonl(args.goodreads_gz, args.goodreads_output)
+        convert_goodreads_gz_to_jsonl(
+            args.goodreads_gz,
+            args.goodreads_output,
+            max_retries=args.download_retries,
+        )
     else:
         print(
             "Goodreads fallback not prepared. Provide --goodreads-gz or "
