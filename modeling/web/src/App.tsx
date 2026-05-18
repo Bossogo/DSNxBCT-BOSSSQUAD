@@ -1,21 +1,75 @@
-import React, { useState, useEffect } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
-  Sparkles,
-  Star,
-  User,
-  Globe,
   AlertCircle,
   ArrowRight,
-  Search,
-  ShoppingBag,
-  Utensils,
   BookOpen,
   CheckCircle2,
+  ChevronRight,
+  Globe,
+  Loader2,
   RefreshCw,
-  Info,
+  Search,
+  ShoppingBag,
+  Sparkles,
+  Star,
+  Utensils,
 } from "lucide-react";
 
+import heroArtwork from "./assets/hero.png";
+import "./App.css";
+
 const API_BASE = "http://localhost:8000";
+const FALLBACK_PLATFORMS = ["yelp", "amazon", "goodreads"];
+
+const PRICE_OPTIONS = [
+  { value: "Budget Friendly (₦)", label: "Budget" },
+  { value: "Moderate ($$)", label: "Mid-range" },
+  { value: "Premium ($$$)", label: "Premium" },
+  { value: "Ultra-Luxe ($$$$)", label: "Luxury" },
+];
+
+const PRESETS = [
+  {
+    id: "chicken-republic",
+    title: "Chicken Republic",
+    category: "Fast food restaurant",
+    location: "Lekki Phase 1, Lagos",
+    price: "Budget Friendly (₦)",
+    description:
+      "A familiar local spot for quick chicken, rice, and a reliable everyday meal.",
+    localTone: true,
+  },
+  {
+    id: "lagoon",
+    title: "The Lagoon Restaurant",
+    category: "Seafood and fine dining",
+    location: "Victoria Island, Lagos",
+    price: "Premium ($$$)",
+    description:
+      "A polished waterfront dining experience with seafood, cocktails, and a relaxed evening atmosphere.",
+    localTone: true,
+  },
+  {
+    id: "argan-oil",
+    title: "Pure Cold-Pressed Argan Oil",
+    category: "Beauty and hair care",
+    location: "Online store",
+    price: "Moderate ($$)",
+    description:
+      "A simple natural oil for hair softness, skin hydration, and everyday care.",
+    localTone: false,
+  },
+  {
+    id: "midnight-library",
+    title: "The Midnight Library",
+    category: "Novel",
+    location: "Bookshop",
+    price: "Moderate ($$)",
+    description:
+      "A thoughtful story about regret, choice, and the different versions of a life.",
+    localTone: false,
+  },
+] as const;
 
 interface RetrievedReview {
   item_name: string;
@@ -23,7 +77,7 @@ interface RetrievedReview {
   review_text: string;
   rating: number;
   platform: string;
-  item_metadata?: Record<string, any>;
+  item_metadata?: Record<string, unknown>;
 }
 
 interface UserProfile {
@@ -48,130 +102,236 @@ interface UserSelectorItem {
   review_count: number;
 }
 
+function friendlyLabel(value: string) {
+  return value
+    .replace(/^.*?_/, "")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function platformLabel(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+function platformHint(value: string) {
+  switch (value.toLowerCase()) {
+    case "yelp":
+      return "Dining and local places";
+    case "amazon":
+      return "Shopping";
+    case "goodreads":
+      return "Books";
+    default:
+      return "Everyday choices";
+  }
+}
+
+function platformIcon(value: string) {
+  switch (value.toLowerCase()) {
+    case "yelp":
+      return <Utensils className="platform-icon" />;
+    case "amazon":
+      return <ShoppingBag className="platform-icon" />;
+    case "goodreads":
+      return <BookOpen className="platform-icon" />;
+    default:
+      return <Globe className="platform-icon" />;
+  }
+}
+
+function priceLabel(value: string) {
+  return PRICE_OPTIONS.find((option) => option.value === value)?.label ?? value;
+}
+
+function confidenceLabel(value: string) {
+  switch (value) {
+    case "high":
+      return "Strong match";
+    case "medium":
+      return "Fair match";
+    default:
+      return "Light match";
+  }
+}
+
+function reviewerTone(profile: UserProfile) {
+  if (profile.mean_rating >= 4.2) {
+    return {
+      label: "Usually upbeat",
+      className: "tone tone-positive",
+    };
+  }
+
+  if (profile.mean_rating <= 2.8) {
+    return {
+      label: "Usually picky",
+      className: "tone tone-critical",
+    };
+  }
+
+  if (profile.std_rating < 0.6) {
+    return {
+      label: "Very consistent",
+      className: "tone tone-consistent",
+    };
+  }
+
+  return {
+    label: "Balanced and detailed",
+    className: "tone tone-balanced",
+  };
+}
+
+function Stars({ rating }: { rating: number }) {
+  const fullStars = Math.floor(rating);
+  const hasHalf = rating % 1 >= 0.25 && rating % 1 <= 0.75;
+  const totalFull = fullStars + (rating % 1 > 0.75 ? 1 : 0);
+
+  return (
+    <div className="stars" aria-label={`${rating.toFixed(1)} out of 5`}>
+      {[...Array(5)].map((_, index) => {
+        if (index < totalFull) {
+          return <Star key={index} className="star star-full" />;
+        }
+
+        if (index === totalFull && hasHalf) {
+          return (
+            <span key={index} className="star-half">
+              <Star className="star star-empty" />
+              <span className="star-half-fill">
+                <Star className="star star-full" />
+              </span>
+            </span>
+          );
+        }
+
+        return <Star key={index} className="star star-empty" />;
+      })}
+    </div>
+  );
+}
+
 export default function App() {
-  // Navigation / Loading States
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [selectedPlatform, setSelectedPlatform] = useState<string>("");
   const [users, setUsers] = useState<UserSelectorItem[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [loadingUsers, setLoadingUsers] = useState<boolean>(false);
-  const [loadingSimulation, setLoadingSimulation] = useState<boolean>(false);
-  const [apiError, setApiError] = useState<string>("");
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [message, setMessage] = useState("");
 
-  // Form Fields
-  const [itemName, setItemName] = useState<string>("");
-  const [itemCategory, setItemCategory] = useState<string>("");
-  const [itemLocation, setItemLocation] = useState<string>("");
-  const [itemPrice, setItemPrice] = useState<string>("Moderate");
-  const [itemDescription, setItemDescription] = useState<string>("");
-  const [nigerianContext, setNigerianContext] = useState<boolean>(false);
+  const [itemName, setItemName] = useState("");
+  const [itemCategory, setItemCategory] = useState("");
+  const [itemLocation, setItemLocation] = useState("");
+  const [itemPrice, setItemPrice] = useState("Moderate ($$)");
+  const [itemDescription, setItemDescription] = useState("");
+  const [useLocalTone, setUseLocalTone] = useState(false);
 
-  // Simulation Results
-  const [simulationResult, setSimulationResult] =
-    useState<SimulateResponse | null>(null);
-  const [textEffectIndex, setTextEffectIndex] = useState<number>(0);
-  const [typewriterText, setTypewriterText] = useState<string>("");
+  const [result, setResult] = useState<SimulateResponse | null>(null);
 
-  // Initial platforms fetch
   useEffect(() => {
-    fetchPlatforms();
+    void fetchPlatforms();
   }, []);
 
-  // Fetch users when platform changes
   useEffect(() => {
     if (selectedPlatform) {
-      fetchUsers(selectedPlatform);
+      void fetchUsers(selectedPlatform);
     }
   }, [selectedPlatform]);
 
-  // Typewriter effect for simulated reviews
-  useEffect(() => {
-    if (simulationResult?.simulated_review) {
-      setTypewriterText("");
-      setTextEffectIndex(0);
-    }
-  }, [simulationResult]);
+  const selectedUser = useMemo(
+    () => users.find((user) => user.composite_user_id === selectedUserId),
+    [users, selectedUserId],
+  );
 
-  useEffect(() => {
-    if (
-      simulationResult?.simulated_review &&
-      textEffectIndex < simulationResult.simulated_review.length
-    ) {
-      const timer = setTimeout(() => {
-        setTypewriterText(
-          (prev) => prev + simulationResult.simulated_review[textEffectIndex],
-        );
-        setTextEffectIndex((prev) => prev + 1);
-      }, 5); // Fast typing speed
-      return () => clearTimeout(timer);
-    }
-  }, [simulationResult, textEffectIndex]);
+  const filteredUsers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return users;
+    return users.filter((user) =>
+      friendlyLabel(user.composite_user_id).toLowerCase().includes(query),
+    );
+  }, [users, searchQuery]);
 
-  const fetchPlatforms = async () => {
+  async function fetchPlatforms() {
     try {
-      setApiError("");
-      const res = await fetch(`${API_BASE}/platforms`);
-      if (!res.ok) throw new Error("Could not fetch platforms");
-      const data = await res.json();
-      const platformList = data.platforms || [];
-      setPlatforms(platformList);
-      if (platformList.length > 0) {
-        setSelectedPlatform(platformList[0]);
+      setMessage("");
+      const response = await fetch(`${API_BASE}/platforms`);
+      if (!response.ok) {
+        throw new Error("Could not load places");
       }
-    } catch (err: any) {
-      console.error(err);
-      setApiError(
-        `Could not connect to the simulation server at ${API_BASE}. Make sure the FastAPI application is running.`,
+
+      const data = (await response.json()) as { platforms?: string[] };
+      const list = data.platforms?.length ? data.platforms : FALLBACK_PLATFORMS;
+      setPlatforms(list);
+      setSelectedPlatform((current) => current || list[0]);
+    } catch (error) {
+      console.error(error);
+      setPlatforms(FALLBACK_PLATFORMS);
+      setSelectedPlatform((current) => current || FALLBACK_PLATFORMS[0]);
+      setMessage(
+        `We could not reach the local preview server at ${API_BASE}. Some choices may still load once it is back online.`,
       );
     }
-  };
+  }
 
-  const fetchUsers = async (platform: string) => {
+  async function fetchUsers(platform: string) {
     setLoadingUsers(true);
-    setApiError("");
+    setMessage("");
+
     try {
-      const res = await fetch(
-        `${API_BASE}/users?platform=${platform}&limit=50`,
+      const response = await fetch(
+        `${API_BASE}/users?platform=${encodeURIComponent(platform)}&limit=50`,
       );
-      if (!res.ok)
-        throw new Error(`Could not fetch users for platform ${platform}`);
-      const data = await res.json();
-      setUsers(data.users || []);
-      if (data.users && data.users.length > 0) {
-        setSelectedUserId(data.users[0].composite_user_id);
-      } else {
-        setSelectedUserId("");
+      if (!response.ok) {
+        throw new Error(`Could not load people for ${platform}`);
       }
-    } catch (err: any) {
-      console.error(err);
-      setApiError(
-        `Failed to load reviewer profiles for platform "${platform}".`,
+
+      const data = (await response.json()) as {
+        users?: UserSelectorItem[];
+      };
+      const list = data.users ?? [];
+      setUsers(list);
+
+      setSelectedUserId((current) => {
+        if (current && list.some((user) => user.composite_user_id === current)) {
+          return current;
+        }
+        return list[0]?.composite_user_id ?? "";
+      });
+    } catch (error) {
+      console.error(error);
+      setUsers([]);
+      setSelectedUserId("");
+      setMessage(
+        `We could not load the people list for ${platformLabel(platform)} right now.`,
       );
     } finally {
       setLoadingUsers(false);
     }
-  };
+  }
 
-  const handleSimulate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
     if (!selectedUserId) {
-      alert("Please select a reviewer profile first.");
+      setMessage("Pick a person first so we have a voice to work from.");
       return;
     }
+
     if (!itemName.trim() || !itemCategory.trim()) {
-      alert("Please fill out at least the Item Name and Category.");
+      setMessage("Add a name and a category to continue.");
       return;
     }
 
-    setLoadingSimulation(true);
-    setApiError("");
-    setSimulationResult(null);
-
-    // Extract raw user_id from composite_user_id (format is platform_userId)
     const rawUserId = selectedUserId.includes("_")
       ? selectedUserId.split("_").slice(1).join("_")
       : selectedUserId;
+
+    setLoadingPreview(true);
+    setMessage("");
+    setResult(null);
 
     try {
       const payload = {
@@ -184,10 +344,10 @@ export default function App() {
           price_range: itemPrice,
           description: itemDescription,
         },
-        nigerian_context: nigerianContext,
+        nigerian_context: useLocalTone,
       };
 
-      const res = await fetch(`${API_BASE}/simulate`, {
+      const response = await fetch(`${API_BASE}/simulate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -195,781 +355,458 @@ export default function App() {
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || "Simulation generation failed");
+      if (!response.ok) {
+        const errorBody = (await response.json().catch(() => ({}))) as {
+          detail?: string;
+        };
+        throw new Error(errorBody.detail || "Preview failed");
       }
 
-      const data = await res.json();
-      setSimulationResult(data);
-    } catch (err: any) {
-      console.error(err);
-      setApiError(
-        err.message || "An error occurred during simulation generation.",
+      const data = (await response.json()) as SimulateResponse;
+      setResult(data);
+    } catch (error) {
+      console.error(error);
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "We could not build the preview right now.",
       );
     } finally {
-      setLoadingSimulation(false);
+      setLoadingPreview(false);
     }
-  };
+  }
 
-  // Preset loading helpers
-  const loadPreset = (presetType: string) => {
-    if (presetType === "chicken-republic") {
-      setItemName("Chicken Republic");
-      setItemCategory("Fast Food Restaurant");
-      setItemLocation("Lekki Phase 1, Lagos");
-      setItemPrice("Budget Friendly (₦)");
-      setItemDescription(
-        "Famous Nigerian fast food chain serving hot spicy chicken, Jollof rice, and fried rice with exceptional value.",
-      );
-      setNigerianContext(true);
-    } else if (presetType === "lagoon") {
-      setItemName("The Lagoon Restaurant");
-      setItemCategory("Fine Dining / Seafood");
-      setItemLocation("Victoria Island, Lagos");
-      setItemPrice("Premium (₦₦₦)");
-      setItemDescription(
-        "Sleek waterfront restaurant with beautiful lagoon breezes, offering high-end continental courses, lobster, and cocktails.",
-      );
-      setNigerianContext(true);
-    } else if (presetType === "argan-oil") {
-      setItemName("Pure Cold-Pressed Moroccan Argan Oil");
-      setItemCategory("Beauty & Hair Care");
-      setItemLocation("Amazon Storefront");
-      setItemPrice("Moderate ($$)");
-      setItemDescription(
-        "100% organic pure argan oil. Perfect moisturizer for softening hair, skin hydration, and nail cuticle restoration.",
-      );
-      setNigerianContext(false);
-    } else if (presetType === "midnight-library") {
-      setItemName("The Midnight Library (Hardcover)");
-      setItemCategory("Fantasy / Fiction Book");
-      setItemLocation("Goodreads Bookstore");
-      setItemPrice("Moderate ($$)");
-      setItemDescription(
-        "A best-selling novel by Matt Haig exploring regret, decision-making, and what truly makes life worth living.",
-      );
-      setNigerianContext(false);
-    }
-  };
+  function loadPreset(presetId: string) {
+    const preset = PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
 
-  // Helper to render stars beautifully
-  const renderStarRating = (rating: number) => {
-    const fullStars = Math.floor(rating);
-    const hasHalf = rating % 1 >= 0.25 && rating % 1 <= 0.75;
-    const extraFull = rating % 1 > 0.75 ? 1 : 0;
-    const totalFull = fullStars + extraFull;
-
-    return (
-      <div className="flex items-center gap-0.5 text-amber-400">
-        {[...Array(5)].map((_, i) => {
-          if (i < totalFull) {
-            return (
-              <Star
-                key={i}
-                className="w-5 h-5 fill-amber-400 stroke-amber-400"
-              />
-            );
-          } else if (i === totalFull && hasHalf) {
-            return (
-              <div key={i} className="relative w-5 h-5">
-                <Star className="absolute top-0 left-0 w-5 h-5 text-slate-700 fill-slate-700 stroke-slate-700" />
-                <div className="absolute top-0 left-0 w-[50%] h-full overflow-hidden">
-                  <Star className="w-5 h-5 text-amber-400 fill-amber-400 stroke-amber-400" />
-                </div>
-              </div>
-            );
-          } else {
-            return (
-              <Star
-                key={i}
-                className="w-5 h-5 text-slate-700 fill-slate-700 stroke-slate-700"
-              />
-            );
-          }
-        })}
-      </div>
-    );
-  };
-
-  const getPlatformIcon = (platformName: string) => {
-    switch (platformName.toLowerCase()) {
-      case "yelp":
-        return <Utensils className="w-4 h-4 text-rose-500" />;
-      case "amazon":
-        return <ShoppingBag className="w-4 h-4 text-amber-500" />;
-      case "goodreads":
-        return <BookOpen className="w-4 h-4 text-emerald-500" />;
-      default:
-        return <Globe className="w-4 h-4 text-sky-500" />;
-    }
-  };
-
-  const getFriendlyReviewerStyle = (profile: UserProfile) => {
-    if (profile.mean_rating >= 4.2) {
-      return {
-        label: "Usually very positive",
-        color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-      };
-    } else if (profile.mean_rating <= 2.8) {
-      return {
-        label: "Usually very critical",
-        color: "text-rose-400 bg-rose-500/10 border-rose-500/20",
-      };
-    }
-
-    if (profile.std_rating < 0.6) {
-      return {
-        label: "Very consistent rating style",
-        color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
-      };
-    } else {
-      return {
-        label: "Balanced and detailed",
-        color: "text-purple-400 bg-purple-500/10 border-purple-500/20",
-      };
-    }
-  };
-
-  // Filter users based on query
-  const filteredUsers = users.filter((u) => {
-    const rawId = u.composite_user_id.toLowerCase();
-    const query = searchQuery.toLowerCase();
-    return rawId.includes(query);
-  });
+    setItemName(preset.title);
+    setItemCategory(preset.category);
+    setItemLocation(preset.location);
+    setItemPrice(preset.price);
+    setItemDescription(preset.description);
+    setUseLocalTone(preset.localTone);
+  }
 
   return (
-    <div className="min-height-screen bg-[#070913] text-slate-100 flex flex-col font-sans">
-      {/* Top Brand Banner */}
-      <header className="border-b border-slate-900 bg-[#090d1a]/80 backdrop-blur-md sticky top-0 z-50 transition-all duration-300">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Sparkles className="w-5 h-5 text-[#070913]" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-250 to-slate-400 bg-clip-text text-transparent m-0 font-sans leading-none">
-                Reviewer Simulator
-              </h1>
-              <p className="text-[10px] text-emerald-400 tracking-wider uppercase font-semibold font-mono mt-0.5">
-                See what a specific customer would write about you
-              </p>
-            </div>
-          </div>
+    <div className="app-shell">
+      <div className="ambient ambient-one" />
+      <div className="ambient ambient-two" />
 
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#10b981]/10 text-emerald-400 border border-[#10b981]/15">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              Ready
+      <div className="page">
+        <header className="hero">
+          <div className="hero-copy">
+            <span className="eyebrow">
+              <Sparkles className="eyebrow-icon" />
+              Friendly preview flow
             </span>
-          </div>
-        </div>
-      </header>
+            <h1>See the kind of response a real person might give.</h1>
+            <p>
+              Pick a place, choose a person, and describe what they are looking
+              at. The flow stays calm and simple from start to finish.
+            </p>
 
-      {/* Main Grid Workspace */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 flex flex-col gap-8">
-        {/* Error Alert Display */}
-        {apiError && (
-          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm flex items-start gap-3 shadow-lg shadow-rose-950/20 animate-fade-in">
-            <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
-            <div className="space-y-1.5">
-              <p className="font-semibold">Connection Unavailable</p>
-              <p className="opacity-90">{apiError}</p>
+            <div className="hero-actions">
               <button
-                onClick={fetchPlatforms}
-                className="mt-2 text-xs font-semibold underline text-rose-400 hover:text-rose-300 transition flex items-center gap-1"
+                type="button"
+                className="primary-button"
+                onClick={() =>
+                  document
+                    .getElementById("builder")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
               >
-                <RefreshCw className="w-3.5 h-3.5" /> Retry Connection
+                Start here
+                <ArrowRight className="button-icon" />
               </button>
+              <div className="hero-note">Three steps. No clutter.</div>
             </div>
           </div>
-        )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* LEFT SIDEBAR: Service and User selector (5 cols) */}
-          <div className="lg:col-span-5 flex flex-col gap-6">
-            {/* Step 1 Card: Reviewer Selection */}
-            <div className="rounded-2xl border border-slate-900 bg-[#090d1a]/55 backdrop-blur-md p-6 flex flex-col gap-5 shadow-xl">
-              <div className="flex items-center justify-between border-b border-slate-900/80 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                    <User className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-100 text-base leading-tight">
-                      1. Select a Reviewer
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Pick a person whose opinion you want to predict
-                    </p>
-                  </div>
+          <figure className="hero-card" aria-hidden="true">
+            <div className="hero-card-image-wrap">
+              <img src={heroArtwork} alt="" className="hero-card-image" />
+            </div>
+            <figcaption className="hero-card-footer">
+              <div>
+                <span className="hero-card-label">What you get</span>
+                <strong>A clean preview of the likely response</strong>
+              </div>
+              <div className="hero-card-meta">
+                <span>Warm</span>
+                <span>Human</span>
+                <span>Simple</span>
+              </div>
+            </figcaption>
+          </figure>
+        </header>
+
+        {message ? (
+          <section className="notice" aria-live="polite">
+            <AlertCircle className="notice-icon" />
+            <div>
+              <strong>Something needs attention</strong>
+              <p>{message}</p>
+            </div>
+            <button type="button" className="notice-action" onClick={fetchPlatforms}>
+              <RefreshCw className="button-icon" />
+              Try again
+            </button>
+          </section>
+        ) : null}
+
+        <main className="layout" id="builder">
+          <aside className="panel">
+            <div className="panel-inner">
+              <div className="section-head">
+                <span className="step-number">1</span>
+                <div>
+                  <h2>Choose a place</h2>
+                  <p>Start with the place that fits your scenario.</p>
                 </div>
               </div>
 
-              {/* Service Selector Tabs */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Select Service
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(platforms.length > 0
-                    ? platforms
-                    : ["yelp", "amazon", "goodreads"]
-                  ).map((plat) => {
-                    const isActive =
-                      selectedPlatform.toLowerCase() === plat.toLowerCase();
+              <div className="platform-list" role="list" aria-label="Choose a place">
+                {(platforms.length ? platforms : FALLBACK_PLATFORMS).map((platform) => {
+                  const active = selectedPlatform === platform;
+                  return (
+                    <button
+                      key={platform}
+                      type="button"
+                      className={`platform-button${active ? " is-active" : ""}`}
+                      onClick={() => {
+                        setSearchQuery("");
+                        setResult(null);
+                        setSelectedPlatform(platform);
+                      }}
+                    >
+                      <span className="platform-icon-wrap">{platformIcon(platform)}</span>
+                      <span className="platform-copy">
+                        <strong>{platformLabel(platform)}</strong>
+                        <span>{platformHint(platform)}</span>
+                      </span>
+                      <ChevronRight className="platform-arrow" />
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="section-head section-head-spaced">
+                <span className="step-number">2</span>
+                <div>
+                  <h2>Pick a person</h2>
+                  <p>Search by the person’s label or id fragment.</p>
+                </div>
+              </div>
+
+              <label className="search-field">
+                <Search className="search-icon" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search the list"
+                />
+              </label>
+
+              <div className="user-meta">
+                <span>{users.length || "No"} people available</span>
+                {selectedUser ? (
+                  <span>Selected: {friendlyLabel(selectedUser.composite_user_id)}</span>
+                ) : null}
+              </div>
+
+              <div className="user-list" aria-live="polite">
+                {loadingUsers ? (
+                  <div className="empty-state">
+                    <Loader2 className="spin-icon" />
+                    <p>Loading people…</p>
+                  </div>
+                ) : filteredUsers.length ? (
+                  filteredUsers.map((user) => {
+                    const active = user.composite_user_id === selectedUserId;
                     return (
                       <button
-                        key={plat}
+                        key={user.composite_user_id}
                         type="button"
-                        onClick={() => setSelectedPlatform(plat)}
-                        className={`py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all duration-200 flex flex-col items-center justify-center gap-1.5 uppercase tracking-wider ${
-                          isActive
-                            ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 shadow-md shadow-emerald-500/5"
-                            : "border-slate-900 bg-slate-950/40 text-slate-400 hover:border-slate-800 hover:text-slate-200"
-                        }`}
+                        className={`user-button${active ? " is-active" : ""}`}
+                        onClick={() => {
+                          setSelectedUserId(user.composite_user_id);
+                          setResult(null);
+                        }}
                       >
-                        {getPlatformIcon(plat)}
-                        <span>{plat}</span>
+                        <span className="user-name">
+                          {friendlyLabel(user.composite_user_id)}
+                        </span>
+                        <span className="user-count">{user.review_count} examples</span>
                       </button>
                     );
-                  })}
-                </div>
-              </div>
-
-              {/* User Search & List Selection */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Choose a Reviewer
-                  </label>
-                  {users.length > 0 && (
-                    <span className="text-[10px] text-slate-500 font-mono">
-                      Loaded {users.length} reviewers
-                    </span>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search reviewer..."
-                    className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-slate-900 bg-slate-950/50 text-slate-200 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/40 transition placeholder-slate-600"
-                  />
-                </div>
-
-                <div className="h-56 overflow-y-auto border border-slate-900/60 rounded-xl bg-slate-950/30 p-2 flex flex-col gap-1.5">
-                  {loadingUsers ? (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-500 text-xs gap-2">
-                      <RefreshCw className="w-5 h-5 animate-spin text-emerald-400" />
-                      <span>Loading reviewers...</span>
-                    </div>
-                  ) : filteredUsers.length === 0 ? (
-                    <div className="flex items-center justify-center h-full text-slate-500 text-xs">
-                      No reviewers found matching "{searchQuery}"
-                    </div>
-                  ) : (
-                    filteredUsers.map((user) => {
-                      const isSelected =
-                        selectedUserId === user.composite_user_id;
-                      // Extract clean ID for visual display
-                      const friendlyId = user.composite_user_id.includes("_")
-                        ? user.composite_user_id.split("_").slice(1).join("_")
-                        : user.composite_user_id;
-
-                      return (
-                        <button
-                          key={user.composite_user_id}
-                          type="button"
-                          onClick={() =>
-                            setSelectedUserId(user.composite_user_id)
-                          }
-                          className={`w-full text-left p-3 rounded-xl border transition-all duration-150 flex items-center justify-between ${
-                            isSelected
-                              ? "bg-[#10b981]/5 border-[#10b981]/30 text-slate-100 ring-1 ring-emerald-500/20"
-                              : "bg-transparent border-transparent text-slate-400 hover:bg-slate-900/40 hover:text-slate-200"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 overflow-hidden">
-                            <div
-                              className={`w-2 h-2 rounded-full ${isSelected ? "bg-emerald-400" : "bg-slate-700"}`}
-                            ></div>
-                            <div className="font-mono text-xs truncate max-w-[140px] md:max-w-none">
-                              {friendlyId}
-                            </div>
-                          </div>
-
-                          <span
-                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                              isSelected
-                                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-mono"
-                                : "bg-slate-900/50 border-slate-800 text-slate-500"
-                            }`}
-                          >
-                            {user.review_count} past reviews
-                          </span>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Presets Utility Box */}
-            <div className="rounded-2xl border border-slate-900 bg-[#090d1a]/55 backdrop-blur-md p-6 flex flex-col gap-4 shadow-xl">
-              <div className="flex items-center gap-2 text-slate-350">
-                <Info className="w-4 h-4 text-emerald-400" />
-                <h4 className="font-semibold text-sm text-slate-250">
-                  Try an Example
-                </h4>
-              </div>
-              <p className="text-xs text-slate-400">
-                Click any option below to instantly load its details.
-              </p>
-              <div className="flex flex-col gap-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => loadPreset("chicken-republic")}
-                    className="p-2 rounded-xl bg-slate-950/65 border border-slate-900 text-left hover:border-emerald-500/30 transition flex flex-col gap-0.5"
-                  >
-                    <span className="text-[11px] font-bold text-slate-200 truncate">
-                      🍗 Chicken Republic
-                    </span>
-                    <span className="text-[9px] text-emerald-400 font-medium">
-                      Local Dining Style
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => loadPreset("lagoon")}
-                    className="p-2 rounded-xl bg-slate-950/65 border border-slate-900 text-left hover:border-emerald-500/30 transition flex flex-col gap-0.5"
-                  >
-                    <span className="text-[11px] font-bold text-slate-200 truncate">
-                      🦞 Lagoon VI Seafood
-                    </span>
-                    <span className="text-[9px] text-emerald-400 font-medium">
-                      Local Dining Style
-                    </span>
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => loadPreset("argan-oil")}
-                    className="p-2 rounded-xl bg-slate-950/65 border border-slate-900 text-left hover:border-emerald-500/30 transition flex flex-col gap-0.5"
-                  >
-                    <span className="text-[11px] font-bold text-slate-200 truncate">
-                      💧 Organic Argan Oil
-                    </span>
-                    <span className="text-[9px] text-amber-400 font-medium">
-                      Beauty Product
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => loadPreset("midnight-library")}
-                    className="p-2 rounded-xl bg-slate-950/65 border border-slate-900 text-left hover:border-emerald-500/30 transition flex flex-col gap-0.5"
-                  >
-                    <span className="text-[11px] font-bold text-slate-200 truncate">
-                      📚 Midnight Library
-                    </span>
-                    <span className="text-[9px] text-emerald-400 font-medium">
-                      Book Review
-                    </span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT WORKSPACE: Input details and Output Simulation (7 cols) */}
-          <div className="lg:col-span-7 flex flex-col gap-6">
-            {/* Step 2 Form Card */}
-            <div className="rounded-2xl border border-slate-900 bg-[#090d1a]/55 backdrop-blur-md p-6 shadow-xl">
-              <div className="flex items-center justify-between border-b border-slate-900/80 pb-4 mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-emerald-400" />
+                  })
+                ) : (
+                  <div className="empty-state">
+                    <p>No matches for “{searchQuery}”.</p>
                   </div>
+                )}
+              </div>
+
+              <div className="preset-box">
+                <div className="section-head preset-head">
                   <div>
-                    <h3 className="font-bold text-slate-100 text-base leading-tight">
-                      2. Enter Product or Place Details
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Tell us what this person is going to review
-                    </p>
+                    <h2>Quick starts</h2>
+                    <p>Use one of these to fill the form fast.</p>
                   </div>
+                </div>
+
+                <div className="preset-grid">
+                  {PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className="preset-button"
+                      onClick={() => loadPreset(preset.id)}
+                    >
+                      <strong>{preset.title}</strong>
+                      <span>{preset.category}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <section className="panel content-panel">
+            <div className="panel-inner">
+              <div className="section-head">
+                <span className="step-number">3</span>
+                <div>
+                  <h2>Describe what they are looking at</h2>
+                  <p>Keep it simple. The form only asks for what matters.</p>
                 </div>
               </div>
 
-              <form onSubmit={handleSimulate} className="space-y-4">
-                {/* Product Name & Category */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Name of Product or Business
-                    </label>
+              <form className="form-grid" onSubmit={handleSubmit}>
+                <div className="field-row">
+                  <label className="field">
+                    <span>Name</span>
                     <input
                       type="text"
                       value={itemName}
-                      onChange={(e) => setItemName(e.target.value)}
-                      placeholder="e.g. KFC Lekki Drive-thru"
+                      onChange={(event) => setItemName(event.target.value)}
+                      placeholder="e.g. a café, product, or service"
                       required
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-900 bg-slate-950/40 text-slate-200 focus:outline-none focus:border-emerald-500/40 transition"
                     />
-                  </div>
+                  </label>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Category
-                    </label>
+                  <label className="field">
+                    <span>Category</span>
                     <input
                       type="text"
                       value={itemCategory}
-                      onChange={(e) => setItemCategory(e.target.value)}
-                      placeholder="e.g. Fast Food"
+                      onChange={(event) => setItemCategory(event.target.value)}
+                      placeholder="e.g. café, book, skincare"
                       required
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-900 bg-slate-950/40 text-slate-200 focus:outline-none focus:border-emerald-500/40 transition"
                     />
-                  </div>
+                  </label>
                 </div>
 
-                {/* Location & Price Range */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Location (Optional)
-                    </label>
+                <div className="field-row">
+                  <label className="field">
+                    <span>Where it is</span>
                     <input
                       type="text"
                       value={itemLocation}
-                      onChange={(e) => setItemLocation(e.target.value)}
-                      placeholder="e.g. Lagos, Nigeria or Online Store"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-900 bg-slate-950/40 text-slate-200 focus:outline-none focus:border-emerald-500/40 transition"
+                      onChange={(event) => setItemLocation(event.target.value)}
+                      placeholder="Optional"
                     />
-                  </div>
+                  </label>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Price Tier (Optional)
-                    </label>
+                  <label className="field">
+                    <span>Price feel</span>
                     <select
                       value={itemPrice}
-                      onChange={(e) => setItemPrice(e.target.value)}
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-900 bg-slate-950/40 text-slate-200 focus:outline-none focus:border-emerald-500/40 transition appearance-none"
+                      onChange={(event) => setItemPrice(event.target.value)}
                     >
-                      <option value="Budget Friendly (₦)">
-                        Budget Friendly (₦)
-                      </option>
-                      <option value="Moderate ($$)">Moderate ($$)</option>
-                      <option value="Premium ($$$)">Premium ($$$)</option>
-                      <option value="Ultra-Luxe ($$$$)">
-                        Ultra-Luxe ($$$$)
-                      </option>
+                      {PRICE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                     </select>
-                  </div>
-                </div>
-
-                {/* Description */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Short Description (Optional)
+                    <span className="field-hint">{priceLabel(itemPrice)}</span>
                   </label>
-                  <textarea
-                    rows={3}
-                    value={itemDescription}
-                    onChange={(e) => setItemDescription(e.target.value)}
-                    placeholder="Briefly describe what this product/service is, its pros and cons, or typical experience..."
-                    className="w-full px-4 py-3 text-sm rounded-xl border border-slate-900 bg-slate-950/40 text-slate-200 focus:outline-none focus:border-emerald-500/40 transition resize-none"
-                  />
                 </div>
 
-                {/* Nigerian Context Toggle Box */}
-                <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-900 flex items-center justify-between gap-4 transition-all duration-200 hover:border-slate-800">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-bold text-slate-200">
-                      Add Local Nigerian Writing Style
-                    </span>
-                    <span className="text-[10px] text-slate-400 leading-normal">
-                      Make the review sound like it was written by a local consumer using local expressions.
-                    </span>
+                <label className="field">
+                  <span>Extra context</span>
+                  <textarea
+                    rows={4}
+                    value={itemDescription}
+                    onChange={(event) => setItemDescription(event.target.value)}
+                    placeholder="A short note about the experience, look, quality, or anything else that matters."
+                  />
+                </label>
+
+                <div className="tone-box">
+                  <div>
+                    <strong>Use local phrasing</strong>
+                    <p>Turn on a more local, everyday writing style.</p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
+                  <label className="switch">
                     <input
                       type="checkbox"
-                      checked={nigerianContext}
-                      onChange={(e) => setNigerianContext(e.target.checked)}
-                      className="sr-only peer"
+                      checked={useLocalTone}
+                      onChange={(event) => setUseLocalTone(event.target.checked)}
                     />
-                    <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-350 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950"></div>
+                    <span />
                   </label>
                 </div>
 
-                {/* Trigger Button */}
                 <button
                   type="submit"
-                  disabled={loadingSimulation || !selectedUserId}
-                  className={`w-full py-4 px-6 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-lg ${
-                    loadingSimulation
-                      ? "bg-slate-900 border border-slate-850 text-slate-400 cursor-not-allowed"
-                      : !selectedUserId
-                        ? "bg-slate-900 border border-slate-850 text-slate-500 cursor-not-allowed"
-                        : "bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 hover:shadow-emerald-500/10 cursor-pointer"
-                  }`}
+                  className="primary-button submit-button"
+                  disabled={loadingPreview || !selectedUserId}
                 >
-                  {loadingSimulation ? (
+                  {loadingPreview ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      Predicting review...
+                      <Loader2 className="button-icon spin-icon" />
+                      Building preview…
                     </>
                   ) : (
                     <>
-                      <span>Predict Review</span>
-                      <ArrowRight className="w-4 h-4" />
+                      Show preview
+                      <ArrowRight className="button-icon" />
                     </>
                   )}
                 </button>
               </form>
-            </div>
 
-            {/* Simulation Results Card */}
-            {loadingSimulation && (
-              <div className="rounded-2xl border border-slate-900 bg-[#090d1a]/55 p-12 flex flex-col items-center justify-center gap-4 shadow-xl min-h-[300px]">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-full border-2 border-emerald-500/10 border-t-2 border-t-emerald-400 animate-spin"></div>
-                  <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 text-emerald-400 animate-pulse" />
+              <div className="preview-card">
+                <div className="section-head section-head-spaced">
+                  <span className="step-number">4</span>
+                  <div>
+                    <h2>Your preview</h2>
+                    <p>A clear, readable outcome once the form is submitted.</p>
+                  </div>
                 </div>
-                <div className="text-center space-y-1">
-                  <h4 className="font-bold text-slate-100 text-sm">
-                    Analyzing reviewer style...
-                  </h4>
-                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                    Reading this reviewer's past ratings and reviews to predict their reaction to {itemName}...
-                  </p>
-                </div>
-              </div>
-            )}
 
-            {simulationResult && !loadingSimulation && (
-              <div className="space-y-6 animate-fade-in">
-                {/* Result Section */}
-                <div className="rounded-2xl border border-emerald-500/25 bg-[#0a0f1d] p-6 shadow-2xl shadow-emerald-500/5 flex flex-col gap-5">
-                  <div className="flex items-center justify-between border-b border-slate-900/80 pb-4">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                      <h4 className="font-bold text-slate-100 text-base">
-                        Predicted Review
-                      </h4>
-                    </div>
-
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-                        simulationResult.confidence === "high"
-                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                          : simulationResult.confidence === "medium"
-                            ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
-                            : "bg-rose-500/10 border-rose-500/20 text-rose-400"
-                      }`}
-                    >
-                      Accuracy: {simulationResult.confidence}
-                    </span>
+                {loadingPreview ? (
+                  <div className="loading-state" aria-live="polite">
+                    <Loader2 className="spin-icon loading-spin" />
+                    <strong>Putting the response together…</strong>
+                    <p>We are using the selected person’s style to shape the preview.</p>
                   </div>
-
-                  {/* Predicted Rating Star Representation */}
-                  <div className="p-4 rounded-xl bg-slate-950/65 border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-0.5">
-                      <span className="text-[10px] font-mono text-slate-450 uppercase tracking-widest">
-                        Predicted Rating
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {renderStarRating(simulationResult.predicted_rating)}
-                        <span className="text-lg font-bold text-slate-100 leading-none">
-                          {simulationResult.predicted_rating.toFixed(1)}{" "}
-                          <span className="text-xs text-slate-500">/ 5.0</span>
+                ) : result ? (
+                  <div className="result-stack">
+                    <section className="result-hero">
+                      <div className="result-rating">
+                        <span className="eyebrow tiny">
+                          <CheckCircle2 className="eyebrow-icon" />
+                          {confidenceLabel(result.confidence)}
                         </span>
-                      </div>
-                    </div>
-
-                    {/* User Profile quick summary */}
-                    <div className="text-left sm:text-right space-y-0.5 border-t sm:border-t-0 sm:border-l border-slate-900 pt-3 sm:pt-0 sm:pl-5">
-                      <span className="text-[10px] font-mono text-slate-450 uppercase tracking-widest">
-                        Reviewer's Typical Rating
-                      </span>
-                      <p className="text-xs text-slate-300 font-semibold">
-                        Usually rates items{" "}
-                        {simulationResult.user_profile.mean_rating.toFixed(1)}{" "}
-                        stars
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Simulated Review Text Display */}
-                  <div className="space-y-1.5">
-                    <span className="text-[10px] font-mono text-slate-450 uppercase tracking-widest block">
-                      Predicted Review Text
-                    </span>
-                    <div className="p-5 rounded-xl bg-slate-950/40 border border-slate-900/60 leading-relaxed text-slate-200 text-sm italic font-sans font-light">
-                      "{typewriterText}"
-                      {textEffectIndex <
-                        simulationResult.simulated_review.length && (
-                        <span className="inline-block w-1.5 h-3 bg-emerald-400 ml-0.5 animate-pulse"></span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Reviewer DNA Insights */}
-                  <div className="pt-2">
-                    <span className="text-[10px] font-mono text-slate-450 uppercase tracking-widest block mb-2">
-                      About this Reviewer
-                    </span>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div className="p-3.5 rounded-xl bg-slate-950/30 border border-slate-900/40 flex flex-col gap-1">
-                        <span className="text-[10px] text-slate-450 uppercase tracking-wide">
-                          Rating Style
-                        </span>
-                        <span
-                          className={`inline-flex self-start items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
-                            getFriendlyReviewerStyle(
-                              simulationResult.user_profile,
-                            ).color
-                          }`}
-                        >
-                          {
-                            getFriendlyReviewerStyle(
-                              simulationResult.user_profile,
-                            ).label
-                          }
-                        </span>
+                        <div className="rating-line">
+                          <Stars rating={result.predicted_rating} />
+                          <strong>{result.predicted_rating.toFixed(1)}</strong>
+                        </div>
                       </div>
 
-                      <div className="p-3.5 rounded-xl bg-slate-950/30 border border-slate-900/40 flex flex-col gap-1">
-                        <span className="text-[10px] text-slate-450 uppercase tracking-wide font-mono">
-                          Typical Review Length
-                        </span>
-                        <span className="text-xs font-semibold text-slate-200 capitalize">
-                          Writes{" "}
-                          {simulationResult.user_profile.typical_review_length}{" "}
-                          reviews
-                        </span>
+                      <div className="result-mirror">
+                        <div>
+                          <span className="result-label">Usually rates around</span>
+                          <strong>{result.user_profile.mean_rating.toFixed(1)} / 5</strong>
+                        </div>
+                        <div>
+                          <span className="result-label">Typical length</span>
+                          <strong>{result.user_profile.typical_review_length}</strong>
+                        </div>
+                        <div>
+                          <span className="result-label">Price feel</span>
+                          <strong>{priceLabel(itemPrice)}</strong>
+                        </div>
                       </div>
-                    </div>
+                    </section>
 
-                    {simulationResult.user_profile.common_themes.length > 0 && (
-                      <div className="mt-3.5">
-                        <span className="text-[10px] text-slate-450 uppercase tracking-wide block mb-1.5">
-                          Common topics mentioned:
+                    <section className="quote-card">
+                      <span className="result-label">Preview text</span>
+                      <p>“{result.simulated_review}”</p>
+                    </section>
+
+                    <section className="insight-grid">
+                      <article className="insight-card">
+                        <span className="result-label">Style</span>
+                        <strong>{reviewerTone(result.user_profile).label}</strong>
+                        <span className={reviewerTone(result.user_profile).className}>
+                          {reviewerTone(result.user_profile).label}
                         </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {simulationResult.user_profile.common_themes.map(
-                            (theme, i) => (
-                              <span
-                                key={i}
-                                className="text-[10px] px-2.5 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 font-semibold"
-                              >
+                      </article>
+                      <article className="insight-card">
+                        <span className="result-label">What they mention most</span>
+                        <div className="chip-row">
+                          {result.user_profile.common_themes.length ? (
+                            result.user_profile.common_themes.map((theme) => (
+                              <span key={theme} className="chip">
                                 {theme}
                               </span>
-                            ),
+                            ))
+                          ) : (
+                            <span className="chip muted">No recurring themes yet</span>
                           )}
                         </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                      </article>
+                    </section>
 
-                {/* Source past reviews written by the selected user */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-bold text-slate-100 text-sm">
-                        Actual Past Reviews by this Reviewer
-                      </h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        Here are actual reviews this person has written for similar items.
-                      </p>
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-950 border border-slate-900 text-slate-500 font-mono">
-                      {simulationResult.retrieved_reviews_used.length} similar reviews found
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4">
-                    {simulationResult.retrieved_reviews_used.map((rev, idx) => (
-                      <div
-                        key={idx}
-                        className="rounded-xl border border-slate-900 bg-[#090d1a]/30 p-4 flex flex-col gap-3 transition hover:border-slate-800"
-                      >
-                        <div className="flex items-start justify-between border-b border-slate-900/50 pb-2">
-                          <div>
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/10 text-emerald-400 font-semibold uppercase tracking-wider font-mono">
-                              {rev.platform}
-                            </span>
-                            <h5 className="font-bold text-slate-200 text-xs mt-1.5">
-                              {rev.item_name}
-                            </h5>
-                            <p className="text-[10px] text-slate-450 mt-0.5">
-                              {rev.item_category}
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-1.5">
-                            {renderStarRating(rev.rating)}
-                            <span className="text-xs font-bold text-slate-300 font-mono">
-                              {rev.rating.toFixed(1)}
-                            </span>
-                          </div>
+                    <section className="examples-block">
+                      <div className="section-head section-head-inline">
+                        <div>
+                          <h3>Similar examples from their history</h3>
+                          <p>
+                            {result.retrieved_reviews_used.length} past examples helped
+                            shape this preview.
+                          </p>
                         </div>
-
-                        <p className="text-xs text-slate-350 leading-relaxed italic">
-                          "{rev.review_text}"
-                        </p>
                       </div>
-                    ))}
+
+                      <div className="example-list">
+                        {result.retrieved_reviews_used.map((review, index) => (
+                          <article key={`${review.item_name}-${index}`} className="example-card">
+                            <div className="example-top">
+                              <div>
+                                <span className="example-source">
+                                  {platformLabel(review.platform)}
+                                </span>
+                                <h4>{review.item_name}</h4>
+                                <p>{review.item_category}</p>
+                              </div>
+                              <div className="example-rating">
+                                <Stars rating={review.rating} />
+                                <strong>{review.rating.toFixed(1)}</strong>
+                              </div>
+                            </div>
+                            <p className="example-quote">“{review.review_text}”</p>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
                   </div>
-                </div>
+                ) : (
+                  <div className="empty-preview">
+                    <Sparkles className="empty-icon" />
+                    <strong>Ready when you are</strong>
+                    <p>
+                      Pick a place, choose a person, and add a few details to see the
+                      preview appear here.
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+          </section>
+        </main>
 
-            {/* Unstarted Placeholder */}
-            {!simulationResult && !loadingSimulation && (
-              <div className="rounded-2xl border border-dashed border-slate-900 bg-[#090d1a]/20 p-16 flex flex-col items-center justify-center gap-4 text-center shadow-inner min-h-[350px]">
-                <div className="w-12 h-12 rounded-xl bg-slate-900/80 border border-slate-850 flex items-center justify-center text-slate-500">
-                  <Sparkles className="w-5 h-5 text-slate-600" />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="font-semibold text-slate-300 text-sm">
-                    Ready to Predict
-                  </h4>
-                  <p className="text-xs text-slate-400 max-w-sm mx-auto leading-normal">
-                    Select a reviewer on the left, enter details of a product or service, and click 'Predict Review' to see what they would say.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
-
-      {/* Footer Branding */}
-      <footer className="border-t border-slate-900/60 bg-[#060812] py-8 text-center text-slate-550 text-xs">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="font-mono text-[10px]">
-            &copy; 2026 Reviewer Simulator. Built with React + Tailwind.
-          </p>
-          <div className="flex items-center gap-4 font-mono text-[10px]">
-            <span>
-              Status: <span className="text-emerald-400">Ready</span>
-            </span>
-            <span>
-              Port: <span className="text-slate-350">8000</span>
-            </span>
-          </div>
-        </div>
-      </footer>
+        <footer className="footer">
+          <span>Human-friendly preview flow</span>
+          <span>React + Tailwind + FastAPI</span>
+        </footer>
+      </div>
     </div>
   );
 }
