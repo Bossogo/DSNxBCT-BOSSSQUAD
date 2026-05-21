@@ -393,17 +393,33 @@ export default function App() {
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
 
+      <nav className="navbar">
+        <div className="navbar-inner">
+          <div className="navbar-brand">
+            <Sparkles className="brand-icon" />
+            ReviewSim
+          </div>
+          <div className="navbar-badge">
+            <span className="status-dot" />
+            Preview Studio
+          </div>
+        </div>
+      </nav>
+
       <div className="page">
         <header className="hero">
           <div className="hero-copy">
             <span className="eyebrow">
               <Sparkles className="eyebrow-icon" />
-              Friendly preview flow
+              AI Review Simulator
             </span>
-            <h1>See the kind of response a real person might give.</h1>
+            <h1>
+              What would <em>they</em> really say?
+            </h1>
             <p>
-              Pick a place, choose a person, and describe what they are looking
-              at. The flow stays calm and simple from start to finish.
+              Pick a platform, select a real reviewer, and describe what
+              they&apos;re evaluating. In seconds, preview exactly how
+              they&apos;d write about it — rating, tone, and all.
             </p>
 
             <div className="hero-actions">
@@ -416,10 +432,10 @@ export default function App() {
                     ?.scrollIntoView({ behavior: "smooth", block: "start" })
                 }
               >
-                Start here
+                Run a simulation
                 <ArrowRight className="button-icon" />
               </button>
-              <div className="hero-note">Three steps. No clutter.</div>
+              <div className="hero-note">Four steps. Zero guesswork.</div>
             </div>
           </div>
 
@@ -430,12 +446,12 @@ export default function App() {
             <figcaption className="hero-card-footer">
               <div>
                 <span className="hero-card-label">What you get</span>
-                <strong>A clean preview of the likely response</strong>
+                <strong>A precise, personalised review preview</strong>
               </div>
               <div className="hero-card-meta">
-                <span>Warm</span>
-                <span>Human</span>
-                <span>Simple</span>
+                <span>AI-powered</span>
+                <span>Human-style</span>
+                <span>Instant</span>
               </div>
             </figcaption>
           </figure>
@@ -803,8 +819,8 @@ export default function App() {
         </main>
 
         <footer className="footer">
-          <span>Human-friendly preview flow</span>
-          <span>React + Tailwind + FastAPI</span>
+          <span>AI Review Simulator — Preview Studio</span>
+          <span>React · Tailwind · FastAPI · Groq</span>
         </footer>
       </div>
     </div>

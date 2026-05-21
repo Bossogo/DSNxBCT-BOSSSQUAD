@@ -1,17 +1,26 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,600;9..144,0,700;9..144,1,400;9..144,1,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
 
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
-  --bg: #f4ede4;
-  --surface: rgba(255, 251, 246, 0.82);
-  --surface-strong: #fffaf3;
-  --text: #1f1812;
-  --muted: #6f665d;
-  --accent: #1f5c4d;
-  --border: rgba(68, 53, 43, 0.12);
-  --shadow: 0 24px 80px rgba(47, 33, 21, 0.08);
+  color-scheme: dark;
+  --bg: #080b18;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.07);
+  --surface-hover: rgba(255, 255, 255, 0.09);
+  --text: #eceaff;
+  --muted: #7b78a0;
+  --accent: #7c6dfa;
+  --accent-light: rgba(124, 109, 250, 0.13);
+  --accent-glow: rgba(124, 109, 250, 0.28);
+  --secondary: #22d3ee;
+  --secondary-light: rgba(34, 211, 238, 0.1);
+  --amber: #fbbf24;
+  --amber-light: rgba(251, 191, 36, 0.1);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-accent: rgba(124, 109, 250, 0.3);
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 4px 20px rgba(0, 0, 0, 0.4);
   --display-font: "Fraunces", Georgia, serif;
   --body-font: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
   --mono-font: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
@@ -33,9 +42,9 @@ body {
   min-height: 100vh;
   color: var(--text);
   background:
-    radial-gradient(circle at top left, rgba(191, 122, 64, 0.12), transparent 36%),
-    radial-gradient(circle at bottom right, rgba(31, 92, 77, 0.1), transparent 28%),
-    linear-gradient(180deg, #f8f2ea 0%, #f2eadf 100%);
+    radial-gradient(ellipse 90% 55% at top left, rgba(124, 109, 250, 0.13), transparent),
+    radial-gradient(ellipse 70% 50% at bottom right, rgba(34, 211, 238, 0.08), transparent),
+    linear-gradient(180deg, #080b18 0%, #060912 100%);
   font-family: var(--body-font);
   overflow-x: hidden;
 }
@@ -48,25 +57,24 @@ textarea {
 }
 
 ::selection {
-  background: rgba(31, 92, 77, 0.18);
+  background: rgba(124, 109, 250, 0.22);
   color: var(--text);
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 248, 240, 0.9);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(68, 53, 43, 0.22);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  border: 2px solid rgba(255, 248, 240, 0.9);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(31, 92, 77, 0.35);
+  background: rgba(124, 109, 250, 0.4);
 }
