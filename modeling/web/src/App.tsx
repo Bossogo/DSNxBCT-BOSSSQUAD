@@ -13,7 +13,7 @@ import {
 import heroArtwork from "./assets/hero.png";
 import "./App.css";
 
-const API_BASE = process.env.VITE_APP_API_BASE_URL || "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_APP_API_BASE_URL || "http://localhost:8000";
 const FALLBACK_PLATFORMS = ["yelp", "amazon", "goodreads"];
 
 const PRICE_OPTIONS = [

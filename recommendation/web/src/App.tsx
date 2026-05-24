@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import { RecommendationDetailDrawer } from "./components/recommendation-detail-drawer";
 
-const API_BASE = process.env.VITE_APP_API_BASE_URL || "http://localhost:8001";
+const API_BASE =
+  import.meta.env.VITE_APP_API_BASE_URL || "http://localhost:8001";
 
 interface RecommendationItem {
   rank: number;
