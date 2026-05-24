@@ -3,7 +3,7 @@ import {
   Send, Sparkles, User, Bot, RotateCcw, 
   Star, ShoppingBag, BookOpen, 
   MapPin, ArrowRight, Loader2, Info,
-  MessageSquare, Trash2
+  MessageSquare, Trash2, ChevronDown
 } from 'lucide-react';
 import { RecommendationDetailDrawer } from './components/recommendation-detail-drawer';
 
@@ -63,7 +63,6 @@ export default function App() {
   const [onboardingComplete, setOnboardingComplete] = useState<boolean>(false);
   const [nigerianContext, setNigerianContext] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [currentRecommendations, setCurrentRecommendations] = useState<RecommendationItem[]>([]);
   
   // Persistence states
   const [savedSessions, setSavedSessions] = useState<SavedSession[]>(() => {
@@ -82,8 +81,30 @@ export default function App() {
   const [selectedItem, setSelectedItem] = useState<RecommendationItem | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [collapsedMessages, setCollapsedMessages] = useState<Record<string, boolean>>({});
+
+  const toggleRecommendationsCollapse = (messageId: string) => {
+    setCollapsedMessages((prev) => ({
+      ...prev,
+      [messageId]: !prev[messageId],
+    }));
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const focusInput = () => {
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+  };
+
+  // Auto-focus the input field when session starts/resumes, and when load completes
+  useEffect(() => {
+    if (sessionId && !isLoading && !isResuming) {
+      focusInput();
+    }
+  }, [sessionId, isLoading, isResuming]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -128,7 +149,6 @@ export default function App() {
   const handleResetSession = () => {
     setSessionId(null);
     setMessages([]);
-    setCurrentRecommendations([]);
     setOnboardingComplete(false);
     setErrorMessage(null);
     localStorage.removeItem('tastefinder_active_session_id');
@@ -177,11 +197,6 @@ export default function App() {
       };
 
       setMessages([firstMsg]);
-      if (data.recommendations && data.recommendations.length > 0) {
-        setCurrentRecommendations(data.recommendations);
-      } else {
-        setCurrentRecommendations([]);
-      }
 
       // Create new session entry in history list
       const newSession: SavedSession = {
@@ -232,7 +247,6 @@ export default function App() {
       });
 
       setMessages(mapped);
-      setCurrentRecommendations(currentRecs);
       localStorage.setItem('tastefinder_active_session_id', id);
 
       // Touch session activity timestamp
@@ -305,9 +319,6 @@ export default function App() {
       };
 
       setMessages(prev => [...prev, assistantMsg]);
-      if (data.recommendations && data.recommendations.length > 0) {
-        setCurrentRecommendations(data.recommendations);
-      }
 
       // Update session title on the first user message if it was default
       setSavedSessions(prev => 
@@ -424,41 +435,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Top Recommendations Section */}
-          {sessionId && currentRecommendations.length > 0 && (
-            <div className="space-y-3 pt-2">
-              <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider block px-1">
-                Top Recommendations
-              </span>
-              <div className="space-y-2">
-                {currentRecommendations.slice(0, 5).map((item) => (
-                  <button
-                    key={`${item.rank}-${item.item_name}`}
-                    onClick={() => handleOpenItem(item)}
-                    className="flex w-full items-start gap-2.5 rounded-lg bg-slate-900/40 border border-slate-800/60 p-2 text-left transition-colors hover:bg-slate-800/40 hover:border-slate-700"
-                  >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-indigo-500/10 text-3xs font-bold text-indigo-400 border border-indigo-500/20">
-                      #{item.rank}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium text-slate-200">{item.item_name}</p>
-                      {item.item_metadata?.city && (
-                        <div className="flex items-center gap-0.5 text-3xs text-slate-400 mt-0.5">
-                          <MapPin className="h-2.5 w-2.5 text-rose-500 shrink-0" />
-                          <span className="truncate">{item.item_metadata.city}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1.5 mt-0.5 text-2xs text-slate-400">
-                        <span className="capitalize">{item.platform}</span>
-                        <span>•</span>
-                        {renderStars(item.avg_rating)}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+
         </div>
 
         {/* Footer info */}
@@ -695,49 +672,61 @@ export default function App() {
                       {/* HYBRID LAYOUT: Inline Product Recommendations Cards */}
                       {isAssistant && message.recommendations && message.recommendations.length > 0 && (
                         <div className="space-y-2.5 w-full">
-                          <span className="text-3xs font-bold text-slate-500 uppercase tracking-widest block px-1">
-                            Recommendations
-                          </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {message.recommendations.map((item) => (
-                              <button
-                                key={`${item.rank}-${item.item_name}`}
-                                onClick={() => handleOpenItem(item)}
-                                className="flex flex-col justify-between text-left p-3.5 rounded-xl border border-slate-800/80 bg-slate-900/40 hover:bg-slate-800/40 hover:border-slate-700 transition-all group relative overflow-hidden"
-                              >
-                                <div className="space-y-2 w-full">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-indigo-500/10 text-3xs font-extrabold text-indigo-400 border border-indigo-500/20">
-                                      #{item.rank}
-                                    </span>
-                                    <span className="capitalize text-4xs rounded bg-slate-800 px-1.5 py-0.5 text-slate-400">
-                                      {item.platform}
-                                    </span>
-                                  </div>
-                                  <h4 className="font-semibold text-xs text-slate-200 group-hover:text-indigo-400 transition-colors line-clamp-2 h-8 leading-snug">
-                                    {item.item_name}
-                                  </h4>
-                                  {item.item_metadata?.city && (
-                                    <div className="flex items-center gap-1 mt-1 text-3xs text-slate-400">
-                                      <MapPin className="h-3 w-3 text-rose-500 shrink-0" />
-                                      <span className="truncate">
-                                        {item.item_metadata.city}
-                                        {item.item_metadata.state ? `, ${item.item_metadata.state}` : ''}
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-3xs font-bold text-slate-500 uppercase tracking-widest">
+                              Recommendations {collapsedMessages[message.id] ? `(${message.recommendations.length} items)` : ''}
+                            </span>
+                            <button
+                              onClick={() => toggleRecommendationsCollapse(message.id)}
+                              className="text-3xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              <span>{collapsedMessages[message.id] ? 'Show' : 'Hide'}</span>
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${collapsedMessages[message.id] ? '' : 'rotate-180'}`} />
+                            </button>
+                          </div>
+                          
+                          {!collapsedMessages[message.id] && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 animate-fade-in">
+                              {message.recommendations.map((item) => (
+                                <button
+                                  key={`${item.rank}-${item.item_name}`}
+                                  onClick={() => handleOpenItem(item)}
+                                  className="flex flex-col justify-between text-left p-3.5 rounded-xl border border-slate-800/80 bg-slate-900/40 hover:bg-slate-800/40 hover:border-slate-700 transition-all group relative overflow-hidden cursor-pointer"
+                                >
+                                  <div className="space-y-2 w-full">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-indigo-500/10 text-3xs font-extrabold text-indigo-400 border border-indigo-500/20">
+                                        #{item.rank}
+                                      </span>
+                                      <span className="capitalize text-4xs rounded bg-slate-800 px-1.5 py-0.5 text-slate-400">
+                                        {item.platform}
                                       </span>
                                     </div>
-                                  )}
-                                </div>
+                                    <h4 className="font-semibold text-xs text-slate-200 group-hover:text-indigo-400 transition-colors line-clamp-2 h-8 leading-snug">
+                                      {item.item_name}
+                                    </h4>
+                                    {item.item_metadata?.city && (
+                                      <div className="flex items-center gap-1 mt-1 text-3xs text-slate-400">
+                                        <MapPin className="h-3 w-3 text-rose-500 shrink-0" />
+                                        <span className="truncate">
+                                          {item.item_metadata.city}
+                                          {item.item_metadata.state ? `, ${item.item_metadata.state}` : ''}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
 
-                                <div className="flex items-center justify-between border-t border-slate-800/60 pt-2.5 mt-3 w-full">
-                                  {renderStars(item.avg_rating)}
-                                  <span className="text-3xs text-indigo-400 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
-                                    <span>Details</span>
-                                    <ArrowRight className="h-2.5 w-2.5" />
-                                  </span>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
+                                  <div className="flex items-center justify-between border-t border-slate-800/60 pt-2.5 mt-3 w-full">
+                                    {renderStars(item.avg_rating)}
+                                    <span className="text-3xs text-indigo-400 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                                      <span>Details</span>
+                                      <ArrowRight className="h-2.5 w-2.5" />
+                                    </span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -769,6 +758,7 @@ export default function App() {
           <footer className="border-t border-slate-800 p-4 bg-[#090d16]/80 backdrop-blur-xs">
             <form onSubmit={handleSendMessage} className="mx-auto max-w-3xl flex gap-2">
               <input
+                ref={inputRef}
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
