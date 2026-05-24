@@ -13,7 +13,7 @@ import {
 import heroArtwork from "./assets/hero.png";
 import "./App.css";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = process.env.VITE_APP_API_BASE_URL || "http://localhost:8000";
 const FALLBACK_PLATFORMS = ["yelp", "amazon", "goodreads"];
 
 const PRICE_OPTIONS = [
@@ -122,8 +122,6 @@ function platformLabel(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
 
-
-
 function priceLabel(value: string) {
   return PRICE_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
@@ -225,8 +223,6 @@ export default function App() {
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
-
-
   useEffect(() => {
     void fetchPlatforms();
   }, []);
@@ -262,12 +258,18 @@ export default function App() {
     }
   }
 
-  async function fetchUsers(platform: string, pageNum: number, searchQ: string) {
+  async function fetchUsers(
+    platform: string,
+    pageNum: number,
+    searchQ: string,
+  ) {
     setLoadingUsers(true);
     setMessage("");
 
     try {
-      const qParam = searchQ.trim() ? `&q=${encodeURIComponent(searchQ.trim())}` : "";
+      const qParam = searchQ.trim()
+        ? `&q=${encodeURIComponent(searchQ.trim())}`
+        : "";
       const response = await fetch(
         `${API_BASE}/users?platform=${encodeURIComponent(platform)}&page=${pageNum}&limit=15${qParam}`,
       );
@@ -284,7 +286,10 @@ export default function App() {
       setTotalUsers(data.total ?? 0);
 
       setSelectedUserId((current) => {
-        if (current && list.some((user) => user.composite_user_id === current)) {
+        if (
+          current &&
+          list.some((user) => user.composite_user_id === current)
+        ) {
           return current;
         }
         if (pageNum === 1 && list.length > 0) {
@@ -457,7 +462,11 @@ export default function App() {
               <strong>Something needs attention</strong>
               <p>{message}</p>
             </div>
-            <button type="button" className="notice-action" onClick={fetchPlatforms}>
+            <button
+              type="button"
+              className="notice-action"
+              onClick={fetchPlatforms}
+            >
               <RefreshCw className="button-icon" />
               Try again
             </button>
@@ -491,7 +500,11 @@ export default function App() {
               <div className="user-meta">
                 <span>{totalUsers || "No"} reviewers found</span>
                 {selectedUser ? (
-                  <span>Selected: {selectedUser.user_name || friendlyLabel(selectedUser.composite_user_id)}</span>
+                  <span>
+                    Selected:{" "}
+                    {selectedUser.user_name ||
+                      friendlyLabel(selectedUser.composite_user_id)}
+                  </span>
                 ) : null}
               </div>
 
@@ -515,9 +528,12 @@ export default function App() {
                         }}
                       >
                         <span className="user-name">
-                          {user.user_name || friendlyLabel(user.composite_user_id)}
+                          {user.user_name ||
+                            friendlyLabel(user.composite_user_id)}
                         </span>
-                        <span className="user-count">{user.review_count} reviews</span>
+                        <span className="user-count">
+                          {user.review_count} reviews
+                        </span>
                       </button>
                     );
                   })
@@ -529,23 +545,42 @@ export default function App() {
               </div>
 
               {totalUsers > 15 && (
-                <div className="pagination-controls" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem', padding: '0 0.25rem' }}>
+                <div
+                  className="pagination-controls"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginTop: "1rem",
+                    padding: "0 0.25rem",
+                  }}
+                >
                   <button
                     type="button"
                     className="preset-button"
-                    style={{ margin: 0, padding: '0.5rem 1rem', width: 'auto', flex: '0 0 auto' }}
+                    style={{
+                      margin: 0,
+                      padding: "0.5rem 1rem",
+                      width: "auto",
+                      flex: "0 0 auto",
+                    }}
                     disabled={page === 1}
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                   >
                     Previous
                   </button>
-                  <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                  <span style={{ fontSize: "0.8rem", opacity: 0.8 }}>
                     Page {page} of {Math.ceil(totalUsers / 15)}
                   </span>
                   <button
                     type="button"
                     className="preset-button"
-                    style={{ margin: 0, padding: '0.5rem 1rem', width: 'auto', flex: '0 0 auto' }}
+                    style={{
+                      margin: 0,
+                      padding: "0.5rem 1rem",
+                      width: "auto",
+                      flex: "0 0 auto",
+                    }}
                     disabled={page >= Math.ceil(totalUsers / 15)}
                     onClick={() => setPage((p) => p + 1)}
                   >
@@ -660,7 +695,9 @@ export default function App() {
                     <input
                       type="checkbox"
                       checked={useLocalTone}
-                      onChange={(event) => setUseLocalTone(event.target.checked)}
+                      onChange={(event) =>
+                        setUseLocalTone(event.target.checked)
+                      }
                     />
                     <span />
                   </label>
@@ -698,7 +735,10 @@ export default function App() {
                   <div className="loading-state" aria-live="polite">
                     <Loader2 className="spin-icon loading-spin" />
                     <strong>Putting the response together…</strong>
-                    <p>We are using the selected person’s style to shape the preview.</p>
+                    <p>
+                      We are using the selected person’s style to shape the
+                      preview.
+                    </p>
                   </div>
                 ) : result ? (
                   <div className="result-stack">
@@ -716,12 +756,18 @@ export default function App() {
 
                       <div className="result-mirror">
                         <div>
-                          <span className="result-label">Usually rates around</span>
-                          <strong>{result.user_profile.mean_rating.toFixed(1)} / 5</strong>
+                          <span className="result-label">
+                            Usually rates around
+                          </span>
+                          <strong>
+                            {result.user_profile.mean_rating.toFixed(1)} / 5
+                          </strong>
                         </div>
                         <div>
                           <span className="result-label">Typical length</span>
-                          <strong>{result.user_profile.typical_review_length}</strong>
+                          <strong>
+                            {result.user_profile.typical_review_length}
+                          </strong>
                         </div>
                         <div>
                           <span className="result-label">Price feel</span>
@@ -736,40 +782,113 @@ export default function App() {
                     </section>
 
                     {result.user_profile.user_name && (
-                      <section className="quote-card" style={{ borderLeft: '4px solid #f43f5e', background: 'rgba(244, 63, 94, 0.03)' }}>
-                        <span className="result-label" style={{ color: '#f43f5e' }}>Reviewer: {result.user_profile.user_name}</span>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.5rem' }}>
+                      <section
+                        className="quote-card"
+                        style={{
+                          borderLeft: "4px solid #f43f5e",
+                          background: "rgba(244, 63, 94, 0.03)",
+                        }}
+                      >
+                        <span
+                          className="result-label"
+                          style={{ color: "#f43f5e" }}
+                        >
+                          Reviewer: {result.user_profile.user_name}
+                        </span>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "0.75rem",
+                            marginTop: "0.5rem",
+                          }}
+                        >
                           {result.user_profile.is_elite && (
-                            <span className="tone tone-positive" style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                              👑 Elite ({result.user_profile.elite_years?.length} years, since {
-                                result.user_profile.elite_years && result.user_profile.elite_years.length > 0 ? 
-                                Math.min(...result.user_profile.elite_years.map(y => {
-                                  const val = parseInt(y);
-                                  return isNaN(val) ? 9999 : (val < 100 ? val + 2000 : val);
-                                })) : '2009'
-                              })
+                            <span
+                              className="tone tone-positive"
+                              style={{
+                                padding: "0.25rem 0.5rem",
+                                borderRadius: "4px",
+                                fontSize: "0.75rem",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              👑 Elite (
+                              {result.user_profile.elite_years?.length} years,
+                              since{" "}
+                              {result.user_profile.elite_years &&
+                              result.user_profile.elite_years.length > 0
+                                ? Math.min(
+                                    ...result.user_profile.elite_years.map(
+                                      (y) => {
+                                        const val = parseInt(y);
+                                        return isNaN(val)
+                                          ? 9999
+                                          : val < 100
+                                            ? val + 2000
+                                            : val;
+                                      },
+                                    ),
+                                  )
+                                : "2009"}
+                              )
                             </span>
                           )}
-                          {result.user_profile.fan_count !== undefined && result.user_profile.fan_count > 0 && (
-                            <span className="tone tone-balanced" style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
-                              ❤️ {result.user_profile.fan_count} Fans
-                            </span>
-                          )}
+                          {result.user_profile.fan_count !== undefined &&
+                            result.user_profile.fan_count > 0 && (
+                              <span
+                                className="tone tone-balanced"
+                                style={{
+                                  padding: "0.25rem 0.5rem",
+                                  borderRadius: "4px",
+                                  fontSize: "0.75rem",
+                                }}
+                              >
+                                ❤️ {result.user_profile.fan_count} Fans
+                              </span>
+                            )}
                           {result.user_profile.yelping_since && (
-                            <span className="tone tone-consistent" style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
-                              📅 Member since {result.user_profile.yelping_since}
+                            <span
+                              className="tone tone-consistent"
+                              style={{
+                                padding: "0.25rem 0.5rem",
+                                borderRadius: "4px",
+                                fontSize: "0.75rem",
+                              }}
+                            >
+                              📅 Member since{" "}
+                              {result.user_profile.yelping_since}
                             </span>
                           )}
                           {result.user_profile.top_compliment && (
-                            <span className="tone tone-consistent" style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', textTransform: 'capitalize' }}>
-                              🏆 Top Compliment: {result.user_profile.top_compliment}
+                            <span
+                              className="tone tone-consistent"
+                              style={{
+                                padding: "0.25rem 0.5rem",
+                                borderRadius: "4px",
+                                fontSize: "0.75rem",
+                                textTransform: "capitalize",
+                              }}
+                            >
+                              🏆 Top Compliment:{" "}
+                              {result.user_profile.top_compliment}
                             </span>
                           )}
-                          {result.user_profile.avg_engagement !== undefined && result.user_profile.avg_engagement > 0 && (
-                            <span className="tone tone-consistent" style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
-                              💬 Avg Engagement: {result.user_profile.avg_engagement.toFixed(1)} / review
-                            </span>
-                          )}
+                          {result.user_profile.avg_engagement !== undefined &&
+                            result.user_profile.avg_engagement > 0 && (
+                              <span
+                                className="tone tone-consistent"
+                                style={{
+                                  padding: "0.25rem 0.5rem",
+                                  borderRadius: "4px",
+                                  fontSize: "0.75rem",
+                                }}
+                              >
+                                💬 Avg Engagement:{" "}
+                                {result.user_profile.avg_engagement.toFixed(1)}{" "}
+                                / review
+                              </span>
+                            )}
                         </div>
                       </section>
                     )}
@@ -777,13 +896,21 @@ export default function App() {
                     <section className="insight-grid">
                       <article className="insight-card">
                         <span className="result-label">Style</span>
-                        <strong>{reviewerTone(result.user_profile).label}</strong>
-                        <span className={reviewerTone(result.user_profile).className}>
+                        <strong>
+                          {reviewerTone(result.user_profile).label}
+                        </strong>
+                        <span
+                          className={
+                            reviewerTone(result.user_profile).className
+                          }
+                        >
                           {reviewerTone(result.user_profile).label}
                         </span>
                       </article>
                       <article className="insight-card">
-                        <span className="result-label">What they mention most</span>
+                        <span className="result-label">
+                          What they mention most
+                        </span>
                         <div className="chip-row">
                           {result.user_profile.common_themes.length ? (
                             result.user_profile.common_themes.map((theme) => (
@@ -792,7 +919,9 @@ export default function App() {
                               </span>
                             ))
                           ) : (
-                            <span className="chip muted">No recurring themes yet</span>
+                            <span className="chip muted">
+                              No recurring themes yet
+                            </span>
                           )}
                         </div>
                       </article>
@@ -803,8 +932,8 @@ export default function App() {
                         <div>
                           <h3>Similar examples from their history</h3>
                           <p>
-                            {result.retrieved_reviews_used.length} past examples helped
-                            shape this preview.
+                            {result.retrieved_reviews_used.length} past examples
+                            helped shape this preview.
                           </p>
                         </div>
                       </div>
@@ -814,15 +943,19 @@ export default function App() {
                           const itemMeta = review.item_metadata || {};
                           const city = itemMeta.city as string | undefined;
                           const state = itemMeta.state as string | undefined;
-                          const locationStr = city ? `📍 ${city}${state ? `, ${state}` : ''}` : '';
-                          
-                          let formattedDate = '';
+                          const locationStr = city
+                            ? `📍 ${city}${state ? `, ${state}` : ""}`
+                            : "";
+
+                          let formattedDate = "";
                           if (review.timestamp) {
                             try {
-                              formattedDate = new Date(review.timestamp).toLocaleDateString(undefined, {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
+                              formattedDate = new Date(
+                                review.timestamp,
+                              ).toLocaleDateString(undefined, {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
                               });
                             } catch {
                               formattedDate = review.timestamp;
@@ -830,15 +963,29 @@ export default function App() {
                           }
 
                           return (
-                            <article key={`${review.item_name}-${index}`} className="example-card">
+                            <article
+                              key={`${review.item_name}-${index}`}
+                              className="example-card"
+                            >
                               <div className="example-top">
                                 <div>
-                                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: "0.5rem",
+                                      alignItems: "center",
+                                    }}
+                                  >
                                     <span className="example-source">
                                       {platformLabel(review.platform)}
                                     </span>
                                     {locationStr && (
-                                      <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                                      <span
+                                        style={{
+                                          fontSize: "0.75rem",
+                                          opacity: 0.6,
+                                        }}
+                                      >
                                         {locationStr}
                                       </span>
                                     )}
@@ -851,14 +998,45 @@ export default function App() {
                                   <strong>{review.rating.toFixed(1)}</strong>
                                 </div>
                               </div>
-                              <p className="example-quote">“{review.review_text}”</p>
-                              {(review.review_useful || review.review_funny || review.review_cool || formattedDate) ? (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', fontSize: '0.75rem', opacity: 0.7, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
-                                  {formattedDate && <span>📅 {formattedDate}</span>}
-                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    {review.review_useful ? <span>👍 {review.review_useful} Useful</span> : null}
-                                    {review.review_funny ? <span>😄 {review.review_funny} Funny</span> : null}
-                                    {review.review_cool ? <span>😎 {review.review_cool} Cool</span> : null}
+                              <p className="example-quote">
+                                “{review.review_text}”
+                              </p>
+                              {review.review_useful ||
+                              review.review_funny ||
+                              review.review_cool ||
+                              formattedDate ? (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    marginTop: "0.75rem",
+                                    fontSize: "0.75rem",
+                                    opacity: 0.7,
+                                    borderTop:
+                                      "1px solid rgba(255,255,255,0.05)",
+                                    paddingTop: "0.5rem",
+                                  }}
+                                >
+                                  {formattedDate && (
+                                    <span>📅 {formattedDate}</span>
+                                  )}
+                                  <div
+                                    style={{ display: "flex", gap: "0.5rem" }}
+                                  >
+                                    {review.review_useful ? (
+                                      <span>
+                                        👍 {review.review_useful} Useful
+                                      </span>
+                                    ) : null}
+                                    {review.review_funny ? (
+                                      <span>
+                                        😄 {review.review_funny} Funny
+                                      </span>
+                                    ) : null}
+                                    {review.review_cool ? (
+                                      <span>😎 {review.review_cool} Cool</span>
+                                    ) : null}
                                   </div>
                                 </div>
                               ) : null}
@@ -873,7 +1051,8 @@ export default function App() {
                     <Sparkles className="empty-icon" />
                     <strong>Ready when you are</strong>
                     <p>
-                      Pick a reviewer, describe the item, and click Show preview to see the results here.
+                      Pick a reviewer, describe the item, and click Show preview
+                      to see the results here.
                     </p>
                   </div>
                 )}

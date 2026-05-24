@@ -1,13 +1,24 @@
-import { useState, useRef, useEffect } from 'react';
-import { 
-  Send, Sparkles, User, Bot, RotateCcw, 
-  Star, ShoppingBag, BookOpen, 
-  MapPin, ArrowRight, Loader2, Info,
-  MessageSquare, Trash2, ChevronDown
-} from 'lucide-react';
-import { RecommendationDetailDrawer } from './components/recommendation-detail-drawer';
+import { useState, useRef, useEffect } from "react";
+import {
+  Send,
+  Sparkles,
+  User,
+  Bot,
+  RotateCcw,
+  Star,
+  ShoppingBag,
+  BookOpen,
+  MapPin,
+  ArrowRight,
+  Loader2,
+  Info,
+  MessageSquare,
+  Trash2,
+  ChevronDown,
+} from "lucide-react";
+import { RecommendationDetailDrawer } from "./components/recommendation-detail-drawer";
 
-const API_BASE = 'http://localhost:8001';
+const API_BASE = process.env.VITE_APP_API_BASE_URL || "http://localhost:8001";
 
 interface RecommendationItem {
   rank: number;
@@ -25,7 +36,7 @@ interface RecommendationItem {
 
 interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   recommendations?: RecommendationItem[];
   timestamp: Date;
@@ -63,25 +74,29 @@ export default function App() {
   const [onboardingComplete, setOnboardingComplete] = useState<boolean>(false);
   const [nigerianContext, setNigerianContext] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  
+
   // Persistence states
   const [savedSessions, setSavedSessions] = useState<SavedSession[]>(() => {
     try {
-      const saved = localStorage.getItem('tastefinder_sessions');
+      const saved = localStorage.getItem("tastefinder_sessions");
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
   const [isResuming, setIsResuming] = useState<boolean>(false);
-  
+
   // UI states
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<RecommendationItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<RecommendationItem | null>(
+    null,
+  );
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [collapsedMessages, setCollapsedMessages] = useState<Record<string, boolean>>({});
+  const [collapsedMessages, setCollapsedMessages] = useState<
+    Record<string, boolean>
+  >({});
 
   const toggleRecommendationsCollapse = (messageId: string) => {
     setCollapsedMessages((prev) => ({
@@ -108,41 +123,43 @@ export default function App() {
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
   // Persist sessions list to localStorage
   useEffect(() => {
-    localStorage.setItem('tastefinder_sessions', JSON.stringify(savedSessions));
+    localStorage.setItem("tastefinder_sessions", JSON.stringify(savedSessions));
   }, [savedSessions]);
-
 
   // Demo user profiles
   const demoProfiles: DemoProfile[] = [
     {
       name: "Karen",
-      description: "Enjoys Mexican restaurants, home décor & shopping, and home services.",
+      description:
+        "Enjoys Mexican restaurants, home décor & shopping, and home services.",
       id: "yelp__BcWyKQL16ndpBdggh2kNA",
       platform: "yelp",
       icon: <Sparkles className="h-5 w-5 text-rose-400" />,
-      tags: ["Mexican Food", "Home Decor", "Shopping"]
+      tags: ["Mexican Food", "Home Decor", "Shopping"],
     },
     {
       name: "Shannon",
-      description: "Focuses on Chinese dining, barbeque spots, and coffee & tea shops.",
+      description:
+        "Focuses on Chinese dining, barbeque spots, and coffee & tea shops.",
       id: "yelp_1HM81n6n4iPIFU5d2Lokhw",
       platform: "yelp",
       icon: <ShoppingBag className="h-5 w-5 text-rose-400" />,
-      tags: ["Chinese", "Barbeque", "Coffee & Tea"]
+      tags: ["Chinese", "Barbeque", "Coffee & Tea"],
     },
     {
       name: "Dana",
-      description: "Loves vegan & vegetarian restaurants, sushi bars, and hookah lounges.",
+      description:
+        "Loves vegan & vegetarian restaurants, sushi bars, and hookah lounges.",
       id: "yelp_Jt3GylPuH64uA3zTdbMdCg",
       platform: "yelp",
       icon: <BookOpen className="h-5 w-5 text-rose-400" />,
-      tags: ["Vegan/Vegetarian", "Sushi Bars", "Nightlife"]
-    }
+      tags: ["Vegan/Vegetarian", "Sushi Bars", "Nightlife"],
+    },
   ];
 
   // Reset session and return to welcome screen
@@ -151,49 +168,54 @@ export default function App() {
     setMessages([]);
     setOnboardingComplete(false);
     setErrorMessage(null);
-    localStorage.removeItem('tastefinder_active_session_id');
+    localStorage.removeItem("tastefinder_active_session_id");
   };
 
   // Delete session from history
   const handleDeleteSession = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSavedSessions(prev => prev.filter(s => s.id !== id));
+    setSavedSessions((prev) => prev.filter((s) => s.id !== id));
     if (sessionId === id) {
       handleResetSession();
     }
   };
 
   // Start recommendation session
-  const handleStartSession = async (userId: string | null = null, platform: string | null = null) => {
+  const handleStartSession = async (
+    userId: string | null = null,
+    platform: string | null = null,
+  ) => {
     setIsLoading(true);
     setErrorMessage(null);
     try {
       const response = await fetch(`${API_BASE}/session/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: userId,
           platform: platform,
-          nigerian_context: nigerianContext
-        })
+          nigerian_context: nigerianContext,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to start session. Please make sure the backend server is running.');
+        throw new Error(
+          "Failed to start session. Please make sure the backend server is running.",
+        );
       }
 
       const data = await response.json();
       const newSessionId = data.session_id;
       setSessionId(newSessionId);
       setOnboardingComplete(data.onboarding_complete || false);
-      localStorage.setItem('tastefinder_active_session_id', newSessionId);
+      localStorage.setItem("tastefinder_active_session_id", newSessionId);
 
       const firstMsg: Message = {
-        id: 'first-message',
-        role: 'assistant',
+        id: "first-message",
+        role: "assistant",
         content: data.message,
         recommendations: data.recommendations || [],
-        timestamp: new Date()
+        timestamp: new Date(),
       };
 
       setMessages([firstMsg]);
@@ -201,16 +223,23 @@ export default function App() {
       // Create new session entry in history list
       const newSession: SavedSession = {
         id: newSessionId,
-        title: userId ? `${demoProfiles.find(p => p.id === userId)?.name || friendlyLabel(userId)}'s Session` : 'New Chat Session',
+        title: userId
+          ? `${demoProfiles.find((p) => p.id === userId)?.name || friendlyLabel(userId)}'s Session`
+          : "New Chat Session",
         platform: platform || undefined,
         nigerianContext: nigerianContext,
         onboardingComplete: data.onboarding_complete || false,
-        lastActive: Date.now()
+        lastActive: Date.now(),
       };
-      setSavedSessions(prev => [newSession, ...prev.filter(s => s.id !== newSessionId)]);
+      setSavedSessions((prev) => [
+        newSession,
+        ...prev.filter((s) => s.id !== newSessionId),
+      ]);
     } catch (err) {
       const error = err as Error;
-      setErrorMessage(error.message || 'An error occurred while connecting to the backend.');
+      setErrorMessage(
+        error.message || "An error occurred while connecting to the backend.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -223,7 +252,7 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/session/${id}/history`);
       if (!response.ok) {
-        throw new Error('Session has expired or does not exist on the server.');
+        throw new Error("Session has expired or does not exist on the server.");
       }
 
       const data = await response.json();
@@ -235,28 +264,41 @@ export default function App() {
       const currentRecs = data.current_recommendations || [];
 
       // Map backend text history to frontend Message models
-      const mapped: Message[] = history.map((m: { role: string; content: string }, idx: number) => {
-        const isLastAssistant = m.role === 'assistant' && idx === history.length - 1;
-        return {
-          id: `${m.role}-${idx}-${Date.now()}`,
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-          timestamp: new Date(),
-          recommendations: isLastAssistant ? currentRecs : []
-        };
-      });
+      const mapped: Message[] = history.map(
+        (m: { role: string; content: string }, idx: number) => {
+          const isLastAssistant =
+            m.role === "assistant" && idx === history.length - 1;
+          return {
+            id: `${m.role}-${idx}-${Date.now()}`,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            timestamp: new Date(),
+            recommendations: isLastAssistant ? currentRecs : [],
+          };
+        },
+      );
 
       setMessages(mapped);
-      localStorage.setItem('tastefinder_active_session_id', id);
+      localStorage.setItem("tastefinder_active_session_id", id);
 
       // Touch session activity timestamp
-      setSavedSessions(prev =>
-        prev.map(s => s.id === id ? { ...s, lastActive: Date.now(), onboardingComplete: data.onboarding_complete || false } : s)
+      setSavedSessions((prev) =>
+        prev.map((s) =>
+          s.id === id
+            ? {
+                ...s,
+                lastActive: Date.now(),
+                onboardingComplete: data.onboarding_complete || false,
+              }
+            : s,
+        ),
       );
     } catch {
-      localStorage.removeItem('tastefinder_active_session_id');
-      setSavedSessions(prev => prev.filter(s => s.id !== id));
-      setErrorMessage('The previous session could not be resumed (it may have expired or backend was restarted).');
+      localStorage.removeItem("tastefinder_active_session_id");
+      setSavedSessions((prev) => prev.filter((s) => s.id !== id));
+      setErrorMessage(
+        "The previous session could not be resumed (it may have expired or backend was restarted).",
+      );
       handleResetSession();
     } finally {
       setIsResuming(false);
@@ -265,7 +307,7 @@ export default function App() {
 
   // Load and validate the active session on mount
   useEffect(() => {
-    const activeId = localStorage.getItem('tastefinder_active_session_id');
+    const activeId = localStorage.getItem("tastefinder_active_session_id");
     if (activeId) {
       setTimeout(() => {
         void handleResumeSession(activeId);
@@ -280,31 +322,33 @@ export default function App() {
     if (!inputText.trim() || !sessionId || isLoading) return;
 
     const userMsgText = inputText.trim();
-    setInputText('');
+    setInputText("");
     setErrorMessage(null);
 
     // Append user message immediately
     const userMsg: Message = {
       id: `user-${Date.now()}`,
-      role: 'user',
+      role: "user",
       content: userMsgText,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
-    setMessages(prev => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
 
     try {
       const response = await fetch(`${API_BASE}/session/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           session_id: sessionId,
-          message: userMsgText
-        })
+          message: userMsgText,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Lost connection to the recommendations assistant. Please try again.');
+        throw new Error(
+          "Lost connection to the recommendations assistant. Please try again.",
+        );
       }
 
       const data = await response.json();
@@ -312,40 +356,42 @@ export default function App() {
 
       const assistantMsg: Message = {
         id: `assistant-${Date.now()}`,
-        role: 'assistant',
+        role: "assistant",
         content: data.assistant_message,
         recommendations: data.recommendations || [],
-        timestamp: new Date()
+        timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, assistantMsg]);
+      setMessages((prev) => [...prev, assistantMsg]);
 
       // Update session title on the first user message if it was default
-      setSavedSessions(prev => 
-        prev.map(s => {
+      setSavedSessions((prev) =>
+        prev.map((s) => {
           if (s.id === sessionId) {
-            const isDefaultTitle = s.title === 'New Chat Session' || s.title === 'Onboarding Chat';
-            const updatedTitle = isDefaultTitle 
-              ? (userMsgText.length > 25 ? userMsgText.slice(0, 25) + '...' : userMsgText)
+            const isDefaultTitle =
+              s.title === "New Chat Session" || s.title === "Onboarding Chat";
+            const updatedTitle = isDefaultTitle
+              ? userMsgText.length > 25
+                ? userMsgText.slice(0, 25) + "..."
+                : userMsgText
               : s.title;
             return {
               ...s,
               title: updatedTitle,
               onboardingComplete: data.onboarding_complete,
-              lastActive: Date.now()
+              lastActive: Date.now(),
             };
           }
           return s;
-        })
+        }),
       );
     } catch (err) {
       const error = err as Error;
-      setErrorMessage(error.message || 'Could not send message.');
+      setErrorMessage(error.message || "Could not send message.");
     } finally {
       setIsLoading(false);
     }
   };
-
 
   // Open item drawer
   const handleOpenItem = (item: RecommendationItem) => {
@@ -358,18 +404,21 @@ export default function App() {
     return (
       <div className="flex items-center gap-0.5 text-amber-400">
         <Star className="h-3.5 w-3.5 fill-current" />
-        <span className="text-xs font-semibold text-slate-300">{rating.toFixed(1)}</span>
+        <span className="text-xs font-semibold text-slate-300">
+          {rating.toFixed(1)}
+        </span>
       </div>
     );
   };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#0b0f19] text-slate-100 font-sans">
-      
       {isResuming && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#0b0f19]/90 backdrop-blur-xs">
           <Loader2 className="h-8 w-8 text-indigo-500 animate-spin mb-3" />
-          <p className="text-sm font-semibold text-slate-300 animate-pulse">Resuming session...</p>
+          <p className="text-sm font-semibold text-slate-300 animate-pulse">
+            Resuming session...
+          </p>
         </div>
       )}
 
@@ -410,16 +459,20 @@ export default function App() {
                     return (
                       <div
                         key={s.id}
-                        onClick={() => !isActive && !isLoading && handleResumeSession(s.id)}
+                        onClick={() =>
+                          !isActive && !isLoading && handleResumeSession(s.id)
+                        }
                         className={`group flex items-center justify-between gap-1.5 rounded-lg p-2 text-left cursor-pointer transition-colors ${
                           isActive
-                            ? 'bg-indigo-600/15 border border-indigo-500/30 text-indigo-300'
-                            : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                            ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-300"
+                            : "text-slate-400 hover:bg-slate-800/40 hover:text-slate-200"
                         }`}
                       >
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <MessageSquare className="h-3.5 w-3.5 shrink-0 text-slate-500 group-hover:text-slate-300" />
-                          <span className="truncate text-xs font-medium">{s.title}</span>
+                          <span className="truncate text-xs font-medium">
+                            {s.title}
+                          </span>
                         </div>
                         <button
                           onClick={(e) => handleDeleteSession(s.id, e)}
@@ -434,8 +487,6 @@ export default function App() {
               </div>
             </div>
           )}
-
-
         </div>
 
         {/* Footer info */}
@@ -449,11 +500,12 @@ export default function App() {
 
       {/* MAIN CONTAINER */}
       <div className="flex flex-1 flex-col overflow-hidden bg-[#090d16]">
-        
         {/* TOP NAVBAR */}
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 px-4 md:px-6 bg-[#090d16]/80 backdrop-blur-xs">
           <div className="flex items-center gap-2">
-            <span className="md:hidden text-xs font-bold text-indigo-400 uppercase">TasteFinder</span>
+            <span className="md:hidden text-xs font-bold text-indigo-400 uppercase">
+              TasteFinder
+            </span>
             {sessionId && (
               <span className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-2 py-0.5 text-2xs font-medium text-slate-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -487,14 +539,18 @@ export default function App() {
               <span className="font-semibold">Connection Error:</span>
               <span>{errorMessage}</span>
             </div>
-            <button onClick={() => setErrorMessage(null)} className="font-bold hover:text-rose-200 transition-colors">Dismiss</button>
+            <button
+              onClick={() => setErrorMessage(null)}
+              className="font-bold hover:text-rose-200 transition-colors"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
         {/* CHAT FEED / WELCOME SCREEN */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
           {!sessionId ? (
-            
             /* WELCOME PROMPTED START SCREEN */
             <div className="mx-auto max-w-2xl py-8 md:py-12 space-y-8 animate-fade-in">
               <div className="space-y-3 text-center">
@@ -505,11 +561,15 @@ export default function App() {
                   Personalized Recommendation Assistant
                 </h1>
                 <p className="text-sm md:text-base text-slate-400 max-w-lg mx-auto">
-                  Find the perfect local restaurants, cafes, services, and shops across platforms through natural conversation.
+                  Find the perfect local restaurants, cafes, services, and shops
+                  across platforms through natural conversation.
                 </p>
                 <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 text-2xs text-indigo-300 font-medium mt-2">
                   <Sparkles className="h-3 w-3 shrink-0" />
-                  <span>Currently featuring local businesses, food &amp; dining, and services on Yelp!</span>
+                  <span>
+                    Currently featuring local businesses, food &amp; dining, and
+                    services on Yelp!
+                  </span>
                 </div>
               </div>
 
@@ -523,31 +583,37 @@ export default function App() {
                   <button
                     onClick={() => setNigerianContext(false)}
                     className={`flex flex-col items-start text-left p-4 rounded-xl border transition-all ${
-                      !nigerianContext 
-                        ? 'bg-indigo-600/10 border-indigo-500/60 ring-2 ring-indigo-500/20' 
-                        : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+                      !nigerianContext
+                        ? "bg-indigo-600/10 border-indigo-500/60 ring-2 ring-indigo-500/20"
+                        : "bg-slate-900/50 border-slate-800 hover:border-slate-700"
                     }`}
                   >
-                    <span className="font-bold text-xs text-slate-200">Standard Mode</span>
+                    <span className="font-bold text-xs text-slate-200">
+                      Standard Mode
+                    </span>
                     <span className="text-2xs text-slate-400 mt-1 leading-normal">
-                      Neutral, direct recommendations matching standard global catalogs.
+                      Neutral, direct recommendations matching standard global
+                      catalogs.
                     </span>
                   </button>
 
                   <button
                     onClick={() => setNigerianContext(true)}
                     className={`flex flex-col items-start text-left p-4 rounded-xl border transition-all ${
-                      nigerianContext 
-                        ? 'bg-orange-500/15 border-orange-500/50 ring-2 ring-orange-500/20' 
-                        : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+                      nigerianContext
+                        ? "bg-orange-500/15 border-orange-500/50 ring-2 ring-orange-500/20"
+                        : "bg-slate-900/50 border-slate-800 hover:border-slate-700"
                     }`}
                   >
                     <span className="font-bold text-xs text-orange-400 flex items-center gap-1.5">
                       <span>🇳🇬 Nigerian Warmth Mode</span>
-                      <span className="rounded bg-orange-500/20 px-1 py-0.5 text-3xs font-extrabold text-orange-300">BONUS</span>
+                      <span className="rounded bg-orange-500/20 px-1 py-0.5 text-3xs font-extrabold text-orange-300">
+                        BONUS
+                      </span>
                     </span>
                     <span className="text-2xs text-slate-400 mt-1 leading-normal">
-                      Friendly tone, prioritizes value-for-money, and highlights local equivalence comparisons.
+                      Friendly tone, prioritizes value-for-money, and highlights
+                      local equivalence comparisons.
                     </span>
                   </button>
                 </div>
@@ -558,7 +624,7 @@ export default function App() {
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center">
                   Select startup option
                 </h2>
-                
+
                 <div className="grid grid-cols-1 gap-4">
                   {/* Option A: Cold Start Chat Onboarding */}
                   <button
@@ -576,7 +642,8 @@ export default function App() {
                         </span>
                       </div>
                       <p className="text-2xs text-slate-400 leading-normal">
-                        Answer 5 quick, simple questions about your budget, interests, and past likes to customize recommendations.
+                        Answer 5 quick, simple questions about your budget,
+                        interests, and past likes to customize recommendations.
                       </p>
                     </div>
                     {isLoading ? (
@@ -589,9 +656,12 @@ export default function App() {
                   {/* Option B: Load Demo Profiles */}
                   <div className="rounded-2xl border border-slate-800/80 bg-slate-900/30 p-5 space-y-4">
                     <div className="space-y-1">
-                      <h3 className="font-bold text-xs text-slate-200">Load a Demo User Profile</h3>
+                      <h3 className="font-bold text-xs text-slate-200">
+                        Load a Demo User Profile
+                      </h3>
                       <p className="text-2xs text-slate-500 leading-normal">
-                        Instantly start a session using real user review history from the catalog. Shows immediate recommendations.
+                        Instantly start a session using real user review history
+                        from the catalog. Shows immediate recommendations.
                       </p>
                     </div>
 
@@ -599,7 +669,9 @@ export default function App() {
                       {demoProfiles.map((profile) => (
                         <button
                           key={profile.id}
-                          onClick={() => handleStartSession(profile.id, profile.platform)}
+                          onClick={() =>
+                            handleStartSession(profile.id, profile.platform)
+                          }
                           disabled={isLoading}
                           className="flex flex-col justify-between p-3.5 rounded-xl border border-slate-800/80 bg-slate-900/60 text-left transition-all hover:bg-slate-800/30 hover:border-slate-700 group disabled:opacity-50"
                         >
@@ -614,10 +686,13 @@ export default function App() {
                               {profile.description}
                             </p>
                           </div>
-                          
+
                           <div className="flex flex-wrap gap-1 mt-3">
                             {profile.tags.map((tag) => (
-                              <span key={tag} className="text-4xs rounded bg-slate-800/60 px-1 py-0.25 text-slate-400">
+                              <span
+                                key={tag}
+                                className="text-4xs rounded bg-slate-800/60 px-1 py-0.25 text-slate-400"
+                              >
                                 {tag}
                               </span>
                             ))}
@@ -629,29 +704,31 @@ export default function App() {
                 </div>
               </div>
             </div>
-
           ) : (
-            
             /* ACTIVE CHAT FEED */
             <div className="mx-auto max-w-3xl space-y-6">
               {messages.map((message) => {
-                const isAssistant = message.role === 'assistant';
+                const isAssistant = message.role === "assistant";
                 return (
                   <div
                     key={message.id}
                     className={`flex items-start gap-3 md:gap-4 animate-slide-in ${
-                      isAssistant ? '' : 'flex-row-reverse'
+                      isAssistant ? "" : "flex-row-reverse"
                     }`}
                   >
                     {/* Avatar */}
                     <div
                       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-bold ${
                         isAssistant
-                          ? 'bg-indigo-600/10 border-indigo-500/20 text-indigo-400'
-                          : 'bg-slate-800 border-slate-700 text-slate-300'
+                          ? "bg-indigo-600/10 border-indigo-500/20 text-indigo-400"
+                          : "bg-slate-800 border-slate-700 text-slate-300"
                       }`}
                     >
-                      {isAssistant ? <Bot className="h-4.5 w-4.5" /> : <User className="h-4.5 w-4.5" />}
+                      {isAssistant ? (
+                        <Bot className="h-4.5 w-4.5" />
+                      ) : (
+                        <User className="h-4.5 w-4.5" />
+                      )}
                     </div>
 
                     {/* Chat Bubble Content */}
@@ -659,8 +736,8 @@ export default function App() {
                       <div
                         className={`rounded-2xl px-4 py-3 text-sm leading-relaxed border ${
                           isAssistant
-                            ? 'bg-[#151d30]/60 border-slate-800/60 text-slate-200'
-                            : 'bg-indigo-600/15 border-indigo-500/20 text-indigo-100'
+                            ? "bg-[#151d30]/60 border-slate-800/60 text-slate-200"
+                            : "bg-indigo-600/15 border-indigo-500/20 text-indigo-100"
                         }`}
                       >
                         {/* Format lines nicely */}
@@ -670,65 +747,80 @@ export default function App() {
                       </div>
 
                       {/* HYBRID LAYOUT: Inline Product Recommendations Cards */}
-                      {isAssistant && message.recommendations && message.recommendations.length > 0 && (
-                        <div className="space-y-2.5 w-full">
-                          <div className="flex items-center justify-between px-1">
-                            <span className="text-3xs font-bold text-slate-500 uppercase tracking-widest">
-                              Recommendations {collapsedMessages[message.id] ? `(${message.recommendations.length} items)` : ''}
-                            </span>
-                            <button
-                              onClick={() => toggleRecommendationsCollapse(message.id)}
-                              className="text-3xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1 cursor-pointer"
-                            >
-                              <span>{collapsedMessages[message.id] ? 'Show' : 'Hide'}</span>
-                              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${collapsedMessages[message.id] ? '' : 'rotate-180'}`} />
-                            </button>
-                          </div>
-                          
-                          {!collapsedMessages[message.id] && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 animate-fade-in">
-                              {message.recommendations.map((item) => (
-                                <button
-                                  key={`${item.rank}-${item.item_name}`}
-                                  onClick={() => handleOpenItem(item)}
-                                  className="flex flex-col justify-between text-left p-3.5 rounded-xl border border-slate-800/80 bg-slate-900/40 hover:bg-slate-800/40 hover:border-slate-700 transition-all group relative overflow-hidden cursor-pointer"
-                                >
-                                  <div className="space-y-2 w-full">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-indigo-500/10 text-3xs font-extrabold text-indigo-400 border border-indigo-500/20">
-                                        #{item.rank}
-                                      </span>
-                                      <span className="capitalize text-4xs rounded bg-slate-800 px-1.5 py-0.5 text-slate-400">
-                                        {item.platform}
-                                      </span>
-                                    </div>
-                                    <h4 className="font-semibold text-xs text-slate-200 group-hover:text-indigo-400 transition-colors line-clamp-2 h-8 leading-snug">
-                                      {item.item_name}
-                                    </h4>
-                                    {item.item_metadata?.city && (
-                                      <div className="flex items-center gap-1 mt-1 text-3xs text-slate-400">
-                                        <MapPin className="h-3 w-3 text-rose-500 shrink-0" />
-                                        <span className="truncate">
-                                          {item.item_metadata.city}
-                                          {item.item_metadata.state ? `, ${item.item_metadata.state}` : ''}
+                      {isAssistant &&
+                        message.recommendations &&
+                        message.recommendations.length > 0 && (
+                          <div className="space-y-2.5 w-full">
+                            <div className="flex items-center justify-between px-1">
+                              <span className="text-3xs font-bold text-slate-500 uppercase tracking-widest">
+                                Recommendations{" "}
+                                {collapsedMessages[message.id]
+                                  ? `(${message.recommendations.length} items)`
+                                  : ""}
+                              </span>
+                              <button
+                                onClick={() =>
+                                  toggleRecommendationsCollapse(message.id)
+                                }
+                                className="text-3xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>
+                                  {collapsedMessages[message.id]
+                                    ? "Show"
+                                    : "Hide"}
+                                </span>
+                                <ChevronDown
+                                  className={`h-3.5 w-3.5 transition-transform duration-200 ${collapsedMessages[message.id] ? "" : "rotate-180"}`}
+                                />
+                              </button>
+                            </div>
+
+                            {!collapsedMessages[message.id] && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 animate-fade-in">
+                                {message.recommendations.map((item) => (
+                                  <button
+                                    key={`${item.rank}-${item.item_name}`}
+                                    onClick={() => handleOpenItem(item)}
+                                    className="flex flex-col justify-between text-left p-3.5 rounded-xl border border-slate-800/80 bg-slate-900/40 hover:bg-slate-800/40 hover:border-slate-700 transition-all group relative overflow-hidden cursor-pointer"
+                                  >
+                                    <div className="space-y-2 w-full">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-indigo-500/10 text-3xs font-extrabold text-indigo-400 border border-indigo-500/20">
+                                          #{item.rank}
+                                        </span>
+                                        <span className="capitalize text-4xs rounded bg-slate-800 px-1.5 py-0.5 text-slate-400">
+                                          {item.platform}
                                         </span>
                                       </div>
-                                    )}
-                                  </div>
+                                      <h4 className="font-semibold text-xs text-slate-200 group-hover:text-indigo-400 transition-colors line-clamp-2 h-8 leading-snug">
+                                        {item.item_name}
+                                      </h4>
+                                      {item.item_metadata?.city && (
+                                        <div className="flex items-center gap-1 mt-1 text-3xs text-slate-400">
+                                          <MapPin className="h-3 w-3 text-rose-500 shrink-0" />
+                                          <span className="truncate">
+                                            {item.item_metadata.city}
+                                            {item.item_metadata.state
+                                              ? `, ${item.item_metadata.state}`
+                                              : ""}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
 
-                                  <div className="flex items-center justify-between border-t border-slate-800/60 pt-2.5 mt-3 w-full">
-                                    {renderStars(item.avg_rating)}
-                                    <span className="text-3xs text-indigo-400 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
-                                      <span>Details</span>
-                                      <ArrowRight className="h-2.5 w-2.5" />
-                                    </span>
-                                  </div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                                    <div className="flex items-center justify-between border-t border-slate-800/60 pt-2.5 mt-3 w-full">
+                                      {renderStars(item.avg_rating)}
+                                      <span className="text-3xs text-indigo-400 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                                        <span>Details</span>
+                                        <ArrowRight className="h-2.5 w-2.5" />
+                                      </span>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                     </div>
                   </div>
                 );
@@ -741,9 +833,18 @@ export default function App() {
                     <Bot className="h-4.5 w-4.5" />
                   </div>
                   <div className="rounded-2xl px-4 py-3 bg-[#151d30]/60 border border-slate-800/60 flex items-center gap-1.5 h-9">
-                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    <span
+                      className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                      style={{ animationDelay: "0ms" }}
+                    ></span>
+                    <span
+                      className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                      style={{ animationDelay: "150ms" }}
+                    ></span>
+                    <span
+                      className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
+                      style={{ animationDelay: "300ms" }}
+                    ></span>
                   </div>
                 </div>
               )}
@@ -756,7 +857,10 @@ export default function App() {
         {/* INPUT PROMPT PANEL */}
         {sessionId && (
           <footer className="border-t border-slate-800 p-4 bg-[#090d16]/80 backdrop-blur-xs">
-            <form onSubmit={handleSendMessage} className="mx-auto max-w-3xl flex gap-2">
+            <form
+              onSubmit={handleSendMessage}
+              className="mx-auto max-w-3xl flex gap-2"
+            >
               <input
                 ref={inputRef}
                 type="text"
@@ -764,8 +868,8 @@ export default function App() {
                 onChange={(e) => setInputText(e.target.value)}
                 disabled={isLoading}
                 placeholder={
-                  !onboardingComplete 
-                    ? "Type your answer..." 
+                  !onboardingComplete
+                    ? "Type your answer..."
                     : "Refine (e.g. 'under 20 dollars', 'only budget-friendly skincare')..."
                 }
                 className="flex-1 rounded-xl border border-slate-800 bg-[#0f172a]/60 px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 transition-all disabled:opacity-50"
