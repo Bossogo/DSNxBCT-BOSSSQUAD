@@ -23,6 +23,9 @@ METADATA_PATH = os.path.join(os.path.dirname(__file__), "metadata.json")
 RAW_DATA_DIR = os.path.join(os.path.dirname(__file__), "raw")
 DEFAULT_AMAZON_PATH = os.path.join(RAW_DATA_DIR, "amazon_reviews.jsonl")
 DEFAULT_GOODREADS_PATH = os.path.join(RAW_DATA_DIR, "goodreads_reviews.jsonl")
+YELP_REVIEW_PATH = os.path.join(RAW_DATA_DIR, "yelp_academic_dataset_review.json")
+YELP_BUSINESS_PATH = os.path.join(RAW_DATA_DIR, "yelp_academic_dataset_business.json")
+YELP_USER_PATH = os.path.join(RAW_DATA_DIR, "yelp_academic_dataset_user.json")
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -42,29 +45,147 @@ def normalize_rating(rating, platform):
         return None
 
 
+def _load_yelp_business_lookup():
+    """Load business data into a dict keyed by business_id."""
+    print("  Loading Yelp business lookup...")
+    lookup = {}
+    with open(YELP_BUSINESS_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+            row = json.loads(line)
+            lookup[row["business_id"]] = {
+                "name": row.get("name", "Unknown Business"),
+                "address": row.get("address", ""),
+                "city": row.get("city", ""),
+                "state": row.get("state", ""),
+                "categories": row.get("categories", "Business"),
+                "stars": row.get("stars"),
+                "review_count": row.get("review_count"),
+            }
+    print(f"  Loaded {len(lookup)} businesses.")
+    return lookup
+
+
+def _load_yelp_user_lookup():
+    """Load user data into a dict keyed by user_id (excluding friends list)."""
+    print("  Loading Yelp user lookup...")
+    lookup = {}
+    with open(YELP_USER_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+            row = json.loads(line)
+            lookup[row["user_id"]] = {
+                "name": row.get("name", ""),
+                "review_count": row.get("review_count", 0),
+                "yelping_since": row.get("yelping_since", ""),
+                "useful": row.get("useful", 0),
+                "funny": row.get("funny", 0),
+                "cool": row.get("cool", 0),
+                "elite": row.get("elite", ""),
+                "fans": row.get("fans", 0),
+                "average_stars": row.get("average_stars", 0.0),
+                "compliment_hot": row.get("compliment_hot", 0),
+                "compliment_more": row.get("compliment_more", 0),
+                "compliment_profile": row.get("compliment_profile", 0),
+                "compliment_cute": row.get("compliment_cute", 0),
+                "compliment_list": row.get("compliment_list", 0),
+                "compliment_note": row.get("compliment_note", 0),
+                "compliment_plain": row.get("compliment_plain", 0),
+                "compliment_cool": row.get("compliment_cool", 0),
+                "compliment_funny": row.get("compliment_funny", 0),
+                "compliment_writer": row.get("compliment_writer", 0),
+                "compliment_photos": row.get("compliment_photos", 0),
+            }
+    print(f"  Loaded {len(lookup)} users.")
+    return lookup
+
+
 def load_yelp(cap):
-    print("Loading Yelp dataset...")
-    ds = load_dataset("Yelp/yelp_review_full", split="train")
+    print("Loading Yelp dataset from local raw files...")
+
+    # Build lookup dicts first
+    biz_lookup = _load_yelp_business_lookup()
+    user_lookup = _load_yelp_user_lookup()
+
     records = []
     user_counter = defaultdict(int)
+    skipped = 0
 
-    for i, row in enumerate(ds):
-        if cap and i >= cap:
-            break
-        uid = f"yelp_user_{i // 10}"  # synthetic user grouping (real dataset has no user_id)
-        records.append({
-            "composite_user_id": f"yelp_{uid}",
-            "platform": "yelp",
-            "user_id": uid,
-            "review_text": row["text"],
-            "rating": float(row["label"] + 1),  # label is 0-4, convert to 1-5
-            "item_name": "Unknown Business",
-            "item_category": "Business",
-            "item_metadata": {},
-            "timestamp": "",
-        })
-        user_counter[uid] += 1
+    print("  Streaming reviews and joining...")
+    with open(YELP_REVIEW_PATH, "r", encoding="utf-8") as f:
+        for i, line in enumerate(f):
+            if cap and i >= cap:
+                break
+            row = json.loads(line)
 
+            uid = row.get("user_id", "")
+            bid = row.get("business_id", "")
+
+            # Skip if we can't resolve both user and business
+            user_info = user_lookup.get(uid)
+            biz_info = biz_lookup.get(bid)
+            if not user_info or not biz_info:
+                skipped += 1
+                continue
+
+            review_text = (row.get("text") or "").strip()
+            if not review_text:
+                skipped += 1
+                continue
+
+            rating = normalize_rating(row.get("stars"), "yelp")
+            if rating is None:
+                skipped += 1
+                continue
+
+            records.append({
+                "composite_user_id": f"yelp_{uid}",
+                "platform": "yelp",
+                "user_id": uid,
+                "user_name": user_info["name"],
+                "review_text": review_text,
+                "rating": rating,
+                "item_name": biz_info["name"],
+                "item_category": biz_info["categories"] or "Business",
+                "item_metadata": {
+                    "business_id": bid,
+                    "address": biz_info["address"],
+                    "city": biz_info["city"],
+                    "state": biz_info["state"],
+                    "business_avg_stars": biz_info["stars"],
+                    "business_review_count": biz_info["review_count"],
+                },
+                "user_metadata": {
+                    "review_count": user_info["review_count"],
+                    "yelping_since": user_info["yelping_since"],
+                    "useful": user_info["useful"],
+                    "funny": user_info["funny"],
+                    "cool": user_info["cool"],
+                    "elite": user_info["elite"],
+                    "fans": user_info["fans"],
+                    "average_stars": user_info["average_stars"],
+                    "compliment_hot": user_info["compliment_hot"],
+                    "compliment_more": user_info["compliment_more"],
+                    "compliment_profile": user_info["compliment_profile"],
+                    "compliment_cute": user_info["compliment_cute"],
+                    "compliment_list": user_info["compliment_list"],
+                    "compliment_note": user_info["compliment_note"],
+                    "compliment_plain": user_info["compliment_plain"],
+                    "compliment_cool": user_info["compliment_cool"],
+                    "compliment_funny": user_info["compliment_funny"],
+                    "compliment_writer": user_info["compliment_writer"],
+                    "compliment_photos": user_info["compliment_photos"],
+                },
+                "timestamp": row.get("date", ""),
+                "review_useful": row.get("useful", 0),
+                "review_funny": row.get("funny", 0),
+                "review_cool": row.get("cool", 0),
+            })
+            user_counter[uid] += 1
+
+    # Free lookup dicts to reclaim memory
+    del biz_lookup
+    del user_lookup
+
+    print(f"  Built {len(records)} records, skipped {skipped} unresolvable/empty reviews.")
     return records, user_counter
 
 
@@ -315,15 +436,15 @@ def ingest(
 
     # Load all platforms
     yelp_records, yelp_users = load_yelp(cap)
-    amazon_records, amazon_users = load_amazon(cap, amazon_path=amazon_path)
-    goodreads_records, goodreads_users = load_goodreads(cap, goodreads_path=goodreads_path)
+    # amazon_records, amazon_users = load_amazon(cap, amazon_path=amazon_path)
+    # goodreads_records, goodreads_users = load_goodreads(cap, goodreads_path=goodreads_path)
 
     # Filter quality users per platform
     yelp_records = filter_quality_users(yelp_records, yelp_users)
-    amazon_records = filter_quality_users(amazon_records, amazon_users)
-    goodreads_records = filter_quality_users(goodreads_records, goodreads_users)
+    # amazon_records = filter_quality_users(amazon_records, amazon_users)
+    # goodreads_records = filter_quality_users(goodreads_records, goodreads_users)
 
-    all_records = yelp_records + amazon_records + goodreads_records
+    all_records = yelp_records  # + amazon_records + goodreads_records
     print(f"\nTotal records to index: {len(all_records)}")
 
     if not all_records:
