@@ -1,24 +1,19 @@
-FROM python:3.12
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
 COPY . .
 
-# Run data ingestion (builds FAISS index)
-RUN python -m data.ingest
+# Build item catalogue (assumes metadata.json and reviews.index are already copied)
+RUN python -m data.build_catalogue
 
-# Expose API port
-EXPOSE 8000
+EXPOSE 8001
 
-# Start FastAPI server
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8001"]
