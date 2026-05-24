@@ -11,9 +11,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Build item catalogue (assumes metadata.json and reviews.index are already copied)
-RUN python -m data.build_catalogue
-
 EXPOSE 8001
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8001"]
