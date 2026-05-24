@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { 
   Send, Sparkles, User, Bot, RotateCcw, 
   Star, ShoppingBag, BookOpen, 
-  MapPin, ArrowRight, Loader2, Info
+  MapPin, ArrowRight, Loader2, Info,
+  MessageSquare, Trash2
 } from 'lucide-react';
 import { RecommendationDetailDrawer } from './components/recommendation-detail-drawer';
 
@@ -18,6 +19,7 @@ interface RecommendationItem {
   item_id?: string;
   review_count?: number;
   top_keywords?: string[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   item_metadata?: Record<string, any>;
 }
 
@@ -38,6 +40,23 @@ interface DemoProfile {
   tags: string[];
 }
 
+interface SavedSession {
+  id: string;
+  title: string;
+  platform?: string;
+  nigerianContext: boolean;
+  onboardingComplete: boolean;
+  lastActive: number;
+}
+
+function friendlyLabel(value: string) {
+  return value
+    .replace(/^.*?_/, "")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export default function App() {
   // Session states
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -45,6 +64,17 @@ export default function App() {
   const [nigerianContext, setNigerianContext] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentRecommendations, setCurrentRecommendations] = useState<RecommendationItem[]>([]);
+  
+  // Persistence states
+  const [savedSessions, setSavedSessions] = useState<SavedSession[]>(() => {
+    try {
+      const saved = localStorage.getItem('tastefinder_sessions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isResuming, setIsResuming] = useState<boolean>(false);
   
   // UI states
   const [inputText, setInputText] = useState('');
@@ -60,33 +90,58 @@ export default function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  // Persist sessions list to localStorage
+  useEffect(() => {
+    localStorage.setItem('tastefinder_sessions', JSON.stringify(savedSessions));
+  }, [savedSessions]);
+
+
   // Demo user profiles
   const demoProfiles: DemoProfile[] = [
     {
-      name: "Audrey",
-      description: "Loves moisturizers, face oils, and daily skin health products.",
-      id: "AG73BVBKUOH22USSFJA5ZWL7AKXA",
-      platform: "amazon",
-      icon: <Sparkles className="h-5 w-5 text-indigo-400" />,
-      tags: ["Skincare", "Daily Routine", "Hydration"]
+      name: "Karen",
+      description: "Enjoys Mexican restaurants, home décor & shopping, and home services.",
+      id: "yelp__BcWyKQL16ndpBdggh2kNA",
+      platform: "yelp",
+      icon: <Sparkles className="h-5 w-5 text-rose-400" />,
+      tags: ["Mexican Food", "Home Decor", "Shopping"]
     },
     {
-      name: "Taylor",
-      description: "Focuses on premium hair masks, luxury cosmetics, and eye creams.",
-      id: "AEZP6Z2C5AVQDZAJECQYZWQRNG3Q",
-      platform: "amazon",
-      icon: <ShoppingBag className="h-5 w-5 text-amber-400" />,
-      tags: ["Haircare", "Cosmetics", "Anti-Aging"]
+      name: "Shannon",
+      description: "Focuses on Chinese dining, barbeque spots, and coffee & tea shops.",
+      id: "yelp_1HM81n6n4iPIFU5d2Lokhw",
+      platform: "yelp",
+      icon: <ShoppingBag className="h-5 w-5 text-rose-400" />,
+      tags: ["Chinese", "Barbeque", "Coffee & Tea"]
     },
     {
-      name: "Jordan",
-      description: "Values lightweight body creams, subtle fragrances, and budget-friendly packs.",
-      id: "AFXF3EGQTQDXMRLDWFU7UBFQZB7Q",
-      platform: "amazon",
-      icon: <BookOpen className="h-5 w-5 text-emerald-400" />,
-      tags: ["Body Creams", "Fragrance", "Value Packs"]
+      name: "Dana",
+      description: "Loves vegan & vegetarian restaurants, sushi bars, and hookah lounges.",
+      id: "yelp_Jt3GylPuH64uA3zTdbMdCg",
+      platform: "yelp",
+      icon: <BookOpen className="h-5 w-5 text-rose-400" />,
+      tags: ["Vegan/Vegetarian", "Sushi Bars", "Nightlife"]
     }
   ];
+
+  // Reset session and return to welcome screen
+  const handleResetSession = () => {
+    setSessionId(null);
+    setMessages([]);
+    setCurrentRecommendations([]);
+    setOnboardingComplete(false);
+    setErrorMessage(null);
+    localStorage.removeItem('tastefinder_active_session_id');
+  };
+
+  // Delete session from history
+  const handleDeleteSession = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSavedSessions(prev => prev.filter(s => s.id !== id));
+    if (sessionId === id) {
+      handleResetSession();
+    }
+  };
 
   // Start recommendation session
   const handleStartSession = async (userId: string | null = null, platform: string | null = null) => {
@@ -108,8 +163,10 @@ export default function App() {
       }
 
       const data = await response.json();
-      setSessionId(data.session_id);
+      const newSessionId = data.session_id;
+      setSessionId(newSessionId);
       setOnboardingComplete(data.onboarding_complete || false);
+      localStorage.setItem('tastefinder_active_session_id', newSessionId);
 
       const firstMsg: Message = {
         id: 'first-message',
@@ -125,12 +182,83 @@ export default function App() {
       } else {
         setCurrentRecommendations([]);
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'An error occurred while connecting to the backend.');
+
+      // Create new session entry in history list
+      const newSession: SavedSession = {
+        id: newSessionId,
+        title: userId ? `${demoProfiles.find(p => p.id === userId)?.name || friendlyLabel(userId)}'s Session` : 'New Chat Session',
+        platform: platform || undefined,
+        nigerianContext: nigerianContext,
+        onboardingComplete: data.onboarding_complete || false,
+        lastActive: Date.now()
+      };
+      setSavedSessions(prev => [newSession, ...prev.filter(s => s.id !== newSessionId)]);
+    } catch (err) {
+      const error = err as Error;
+      setErrorMessage(error.message || 'An error occurred while connecting to the backend.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Resume/Restore recommendation session
+  const handleResumeSession = async (id: string) => {
+    setIsResuming(true);
+    setErrorMessage(null);
+    try {
+      const response = await fetch(`${API_BASE}/session/${id}/history`);
+      if (!response.ok) {
+        throw new Error('Session has expired or does not exist on the server.');
+      }
+
+      const data = await response.json();
+      setSessionId(data.session_id);
+      setOnboardingComplete(data.onboarding_complete || false);
+      setNigerianContext(data.nigerian_context || false);
+
+      const history = data.conversation_history || [];
+      const currentRecs = data.current_recommendations || [];
+
+      // Map backend text history to frontend Message models
+      const mapped: Message[] = history.map((m: { role: string; content: string }, idx: number) => {
+        const isLastAssistant = m.role === 'assistant' && idx === history.length - 1;
+        return {
+          id: `${m.role}-${idx}-${Date.now()}`,
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+          timestamp: new Date(),
+          recommendations: isLastAssistant ? currentRecs : []
+        };
+      });
+
+      setMessages(mapped);
+      setCurrentRecommendations(currentRecs);
+      localStorage.setItem('tastefinder_active_session_id', id);
+
+      // Touch session activity timestamp
+      setSavedSessions(prev =>
+        prev.map(s => s.id === id ? { ...s, lastActive: Date.now(), onboardingComplete: data.onboarding_complete || false } : s)
+      );
+    } catch {
+      localStorage.removeItem('tastefinder_active_session_id');
+      setSavedSessions(prev => prev.filter(s => s.id !== id));
+      setErrorMessage('The previous session could not be resumed (it may have expired or backend was restarted).');
+      handleResetSession();
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
+  // Load and validate the active session on mount
+  useEffect(() => {
+    const activeId = localStorage.getItem('tastefinder_active_session_id');
+    if (activeId) {
+      setTimeout(() => {
+        void handleResumeSession(activeId);
+      }, 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Send message to assistant
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -180,21 +308,33 @@ export default function App() {
       if (data.recommendations && data.recommendations.length > 0) {
         setCurrentRecommendations(data.recommendations);
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Could not send message.');
+
+      // Update session title on the first user message if it was default
+      setSavedSessions(prev => 
+        prev.map(s => {
+          if (s.id === sessionId) {
+            const isDefaultTitle = s.title === 'New Chat Session' || s.title === 'Onboarding Chat';
+            const updatedTitle = isDefaultTitle 
+              ? (userMsgText.length > 25 ? userMsgText.slice(0, 25) + '...' : userMsgText)
+              : s.title;
+            return {
+              ...s,
+              title: updatedTitle,
+              onboardingComplete: data.onboarding_complete,
+              lastActive: Date.now()
+            };
+          }
+          return s;
+        })
+      );
+    } catch (err) {
+      const error = err as Error;
+      setErrorMessage(error.message || 'Could not send message.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Reset session and return to welcome screen
-  const handleResetSession = () => {
-    setSessionId(null);
-    setMessages([]);
-    setCurrentRecommendations([]);
-    setOnboardingComplete(false);
-    setErrorMessage(null);
-  };
 
   // Open item drawer
   const handleOpenItem = (item: RecommendationItem) => {
@@ -215,6 +355,13 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#0b0f19] text-slate-100 font-sans">
       
+      {isResuming && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#0b0f19]/90 backdrop-blur-xs">
+          <Loader2 className="h-8 w-8 text-indigo-500 animate-spin mb-3" />
+          <p className="text-sm font-semibold text-slate-300 animate-pulse">Resuming session...</p>
+        </div>
+      )}
+
       {/* SIDEBAR */}
       <div className="hidden md:flex w-64 flex-col border-r border-slate-800 bg-[#0f172a]/95">
         {/* Title */}
@@ -229,18 +376,57 @@ export default function App() {
         <div className="p-4">
           <button
             onClick={handleResetSession}
-            disabled={!sessionId}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/40 px-3 py-2 text-xs font-semibold text-slate-200 transition-all hover:bg-slate-800 hover:border-slate-600 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-800/20 px-3 py-2.5 text-xs font-bold text-indigo-400 transition-all hover:bg-indigo-600/10 hover:border-indigo-500/50"
           >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span>Reset Session</span>
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>+ New Chat</span>
           </button>
         </div>
 
         {/* Sidebar Info & Active Recommendations Panel */}
-        <div className="flex-1 overflow-y-auto px-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-4 space-y-4 py-2">
+          {/* Recent Chats Section */}
+          {savedSessions.length > 0 && (
+            <div className="space-y-2">
+              <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider block px-1">
+                Recent Chats
+              </span>
+              <div className="space-y-1">
+                {savedSessions
+                  .sort((a, b) => b.lastActive - a.lastActive)
+                  .map((s) => {
+                    const isActive = s.id === sessionId;
+                    return (
+                      <div
+                        key={s.id}
+                        onClick={() => !isActive && !isLoading && handleResumeSession(s.id)}
+                        className={`group flex items-center justify-between gap-1.5 rounded-lg p-2 text-left cursor-pointer transition-colors ${
+                          isActive
+                            ? 'bg-indigo-600/15 border border-indigo-500/30 text-indigo-300'
+                            : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <MessageSquare className="h-3.5 w-3.5 shrink-0 text-slate-500 group-hover:text-slate-300" />
+                          <span className="truncate text-xs font-medium">{s.title}</span>
+                        </div>
+                        <button
+                          onClick={(e) => handleDeleteSession(s.id, e)}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-slate-700 text-slate-500 hover:text-rose-400 transition-all shrink-0"
+                          title="Delete Chat"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
+          {/* Top Recommendations Section */}
           {sessionId && currentRecommendations.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-3 pt-2">
               <span className="text-2xs font-semibold text-slate-500 uppercase tracking-wider block px-1">
                 Top Recommendations
               </span>
@@ -256,6 +442,12 @@ export default function App() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-medium text-slate-200">{item.item_name}</p>
+                      {item.item_metadata?.city && (
+                        <div className="flex items-center gap-0.5 text-3xs text-slate-400 mt-0.5">
+                          <MapPin className="h-2.5 w-2.5 text-rose-500 shrink-0" />
+                          <span className="truncate">{item.item_metadata.city}</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-1.5 mt-0.5 text-2xs text-slate-400">
                         <span className="capitalize">{item.platform}</span>
                         <span>•</span>
@@ -336,11 +528,11 @@ export default function App() {
                   Personalized Recommendation Assistant
                 </h1>
                 <p className="text-sm md:text-base text-slate-400 max-w-lg mx-auto">
-                  Find the perfect skincare, haircare, and beauty products across platforms through natural conversation.
+                  Find the perfect local restaurants, cafes, services, and shops across platforms through natural conversation.
                 </p>
                 <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 text-2xs text-indigo-300 font-medium mt-2">
                   <Sparkles className="h-3 w-3 shrink-0" />
-                  <span>Currently featuring our Beauty &amp; Skincare collection — more categories coming soon!</span>
+                  <span>Currently featuring local businesses, food &amp; dining, and services on Yelp!</span>
                 </div>
               </div>
 
@@ -525,6 +717,15 @@ export default function App() {
                                   <h4 className="font-semibold text-xs text-slate-200 group-hover:text-indigo-400 transition-colors line-clamp-2 h-8 leading-snug">
                                     {item.item_name}
                                   </h4>
+                                  {item.item_metadata?.city && (
+                                    <div className="flex items-center gap-1 mt-1 text-3xs text-slate-400">
+                                      <MapPin className="h-3 w-3 text-rose-500 shrink-0" />
+                                      <span className="truncate">
+                                        {item.item_metadata.city}
+                                        {item.item_metadata.state ? `, ${item.item_metadata.state}` : ''}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div className="flex items-center justify-between border-t border-slate-800/60 pt-2.5 mt-3 w-full">

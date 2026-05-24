@@ -44,18 +44,34 @@ class Retriever:
         platforms = list({r["platform"] for r in self.metadata})
         return sorted(platforms)
 
-    def get_users(self, platform, limit=50):
+    def get_users(self, platform, skip=0, limit=15, query=None):
         users = {}
+        user_names = {}
         for record in self.metadata:
             if record["platform"] == platform:
                 uid = record["composite_user_id"]
                 users[uid] = users.get(uid, 0) + 1
+                if uid not in user_names and "user_name" in record:
+                    user_names[uid] = record["user_name"]
         result = [
-            {"composite_user_id": uid, "review_count": count}
+            {
+                "composite_user_id": uid,
+                "review_count": count,
+                "user_name": user_names.get(uid, "")
+            }
             for uid, count in users.items()
         ]
+
+        if query:
+            q_lower = query.lower()
+            result = [
+                u for u in result
+                if q_lower in u["user_name"].lower() or q_lower in u["composite_user_id"].lower()
+            ]
+
         result.sort(key=lambda x: x["review_count"], reverse=True)
-        return result[:limit]
+        total = len(result)
+        return result[skip:skip+limit], total
 
     def _compute_user_profile(self, user_records):
         """Compute behavioural statistics for a user."""
@@ -93,12 +109,60 @@ class Retriever:
                 filtered = [w for w in all_words if w not in stopwords and len(w) > 3]
                 common_themes = [w for w, _ in Counter(filtered).most_common(10)]
 
+        # Extract Yelp-specific rich metadata from the first record if available
+        r0 = user_records[0] if user_records else {}
+        user_name = r0.get("user_name", "")
+        
+        user_metadata = r0.get("user_metadata", {}) or {}
+        elite_str = user_metadata.get("elite", "") if isinstance(user_metadata, dict) else ""
+        elite_years = [y.strip() for y in elite_str.split(",") if y.strip()] if elite_str else []
+        is_elite = len(elite_years) > 0
+        
+        fan_count = user_metadata.get("fans", 0) if isinstance(user_metadata, dict) else 0
+        
+        yelping_since = user_metadata.get("yelping_since", "") if isinstance(user_metadata, dict) else ""
+        member_year = yelping_since[:4] if yelping_since else ""
+        
+        # Calculate average engagement (useful + funny + cool) across user's reviews
+        useful_list = [r.get("review_useful", 0) for r in user_records if r.get("review_useful") is not None]
+        funny_list = [r.get("review_funny", 0) for r in user_records if r.get("review_funny") is not None]
+        cool_list = [r.get("review_cool", 0) for r in user_records if r.get("review_cool") is not None]
+        
+        if useful_list or funny_list or cool_list:
+            total_engagement = [
+                r.get("review_useful", 0) + r.get("review_funny", 0) + r.get("review_cool", 0)
+                for r in user_records
+            ]
+            avg_engagement = round(float(np.mean(total_engagement)), 2)
+        else:
+            avg_engagement = 0.0
+
+        # Calculate top compliment category
+        top_compliment = ""
+        if isinstance(user_metadata, dict):
+            compliments = {
+                k: v for k, v in user_metadata.items()
+                if k.startswith("compliment_") and isinstance(v, (int, float))
+            }
+            if compliments:
+                max_val = max(compliments.values())
+                if max_val > 0:
+                    top_key = max(compliments, key=compliments.get)
+                    top_compliment = top_key.replace("compliment_", "").title()
+
         return {
             "mean_rating": mean_rating,
             "std_rating": std_rating,
             "typical_review_length": typical_length,
             "common_themes": common_themes,
             "total_reviews": len(user_records),
+            "user_name": user_name,
+            "is_elite": is_elite,
+            "elite_years": elite_years,
+            "fan_count": fan_count,
+            "yelping_since": member_year,
+            "avg_engagement": avg_engagement,
+            "top_compliment": top_compliment,
         }
 
     def retrieve(self, platform, user_id, item):

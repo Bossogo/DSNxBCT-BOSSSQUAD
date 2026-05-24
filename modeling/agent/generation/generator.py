@@ -44,8 +44,13 @@ class Generator:
     def _format_retrieved_reviews(self, reviews):
         lines = []
         for i, r in enumerate(reviews, 1):
+            item_meta = r.get('item_metadata', {}) or {}
+            city = item_meta.get('city', '')
+            state = item_meta.get('state', '')
+            loc_str = f" | {city}, {state}" if (city or state) else ""
+            engagement = f" | 👍{r.get('review_useful', 0)} 😄{r.get('review_funny', 0)} 😎{r.get('review_cool', 0)}"
             lines.append(
-                f"Review {i} ({r['item_name']} | Rating: {r['rating']}/5):\n"
+                f"Review {i} ({r['item_name']}{loc_str} | Rating: {r['rating']}/5{engagement}):\n"
                 f"{r['review_text']}\n"
             )
         return "\n".join(lines)
@@ -61,10 +66,35 @@ class Generator:
             if k not in ("name", "category") and v
         )
 
+        is_elite = profile.get('is_elite', False)
+        elite_info = "No"
+        if is_elite:
+            years = profile.get('elite_years', [])
+            if years:
+                parsed_years = []
+                for y in years:
+                    try:
+                        val = int(y)
+                        if val < 100:
+                            val += 2000
+                        parsed_years.append(val)
+                    except ValueError:
+                        pass
+                first_year = min(parsed_years) if parsed_years else years[0]
+                elite_info = f"Yes ({len(years)} years, since {first_year})"
+            else:
+                elite_info = "Yes"
+
         prompt = f"""You are simulating reviews for a user with the following behavioural profile:
 
 PLATFORM: {retrieval_result['platform']}
 USER ID: {retrieval_result['user_id']}
+USER NAME: {profile.get('user_name', 'Unknown')}
+ELITE REVIEWER: {elite_info}
+FANS: {profile.get('fan_count', 0)}
+MEMBER SINCE: {profile.get('yelping_since', 'Unknown')}
+AVG ENGAGEMENT PER REVIEW: {profile.get('avg_engagement', 0.0):.1f} (useful+funny+cool)
+TOP COMPLIMENT TYPE: {profile.get('top_compliment', 'None')}
 AVERAGE RATING: {profile['mean_rating']}/5
 RATING CONSISTENCY: {profile['std_rating']} standard deviation (lower = more consistent)
 TYPICAL REVIEW LENGTH: {profile['typical_review_length']}

@@ -58,6 +58,11 @@ class RetrievedReview(BaseModel):
     rating: float
     platform: str
     item_metadata: Optional[dict] = {}
+    user_name: Optional[str] = ""
+    timestamp: Optional[str] = ""
+    review_useful: Optional[int] = 0
+    review_funny: Optional[int] = 0
+    review_cool: Optional[int] = 0
 
 class SimulateRequest(BaseModel):
     platform: str
@@ -87,15 +92,17 @@ def get_platforms():
 
 
 @app.get("/users")
-def get_users(platform: str, limit: int = 50):
-    """Returns users for a given platform sorted by review count."""
-    users = retriever.get_users(platform=platform, limit=limit)
-    if not users:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No users found for platform '{platform}'"
-        )
-    return {"platform": platform, "users": users}
+def get_users(platform: str, page: int = 1, limit: int = 15, q: Optional[str] = None):
+    """Returns users for a given platform sorted by review count with pagination and search."""
+    skip = (page - 1) * limit
+    users, total = retriever.get_users(platform=platform, skip=skip, limit=limit, query=q)
+    return {
+        "platform": platform,
+        "users": users,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
 
 
 @app.post("/simulate", response_model=SimulateResponse)

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Star, ExternalLink, ShieldCheck, Tag } from 'lucide-react';
+import { X, Star, ExternalLink, ShieldCheck, Tag, MapPin } from 'lucide-react';
 
 interface RecommendationItem {
   rank: number;
@@ -11,6 +11,7 @@ interface RecommendationItem {
   item_id?: string;
   review_count?: number;
   top_keywords?: string[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   item_metadata?: Record<string, any>;
 }
 
@@ -85,6 +86,14 @@ export const RecommendationDetailDrawer: React.FC<RecommendationDetailDrawerProp
                     {item.item_name}
                   </h3>
                   <p className="text-sm text-indigo-400 font-medium mt-1">{item.item_category}</p>
+                  {(item.item_metadata?.address || item.item_metadata?.city) && (
+                    <div className="flex items-start gap-1.5 mt-2 text-xs text-slate-400 leading-relaxed">
+                      <MapPin className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                      <span>
+                        {[item.item_metadata.address, item.item_metadata.city, item.item_metadata.state].filter(Boolean).join(', ')}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 {item.rank && (
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold text-lg">
@@ -170,7 +179,7 @@ export const RecommendationDetailDrawer: React.FC<RecommendationDetailDrawerProp
                       .replace(/_/g, ' ')
                       .replace(/\b\w/g, (char) => char.toUpperCase());
 
-                    let displayVal = '';
+                    let displayVal: string;
                     if (Array.isArray(val)) {
                       displayVal = val.join(', ');
                     } else if (typeof val === 'object') {

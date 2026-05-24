@@ -3,8 +3,8 @@ import shutil
 
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    task_a_data_dir = os.path.abspath(os.path.join(base_dir, "../modeling/agent/data"))
-    task_a_env_path = os.path.abspath(os.path.join(base_dir, "../modeling/agent/.env"))
+    task_a_data_dir = os.path.abspath(os.path.join(base_dir, "../../modeling/agent/data"))
+    task_a_env_path = os.path.abspath(os.path.join(base_dir, "../../modeling/agent/.env"))
 
     # Define target directories
     dirs = [

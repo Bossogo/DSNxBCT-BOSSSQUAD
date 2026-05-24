@@ -6,6 +6,7 @@ Loads reviews from HuggingFace datasets, embeds them, and indexes into FAISS.
 import os
 import json
 import argparse
+import gc
 import numpy as np
 import pandas as pd
 import torch
@@ -16,7 +17,7 @@ from collections import defaultdict
 
 # ── Config ────────────────────────────────────────────────────────────────────
 EMBED_MODEL = "all-MiniLM-L6-v2"
-MIN_REVIEWS_PER_USER = 10
+MIN_REVIEWS_PER_USER = 5
 DEV_CAP = 50_000          # reviews per platform in dev mode
 INDEX_DIR = os.path.join(os.path.dirname(__file__), "faiss_index")
 METADATA_PATH = os.path.join(os.path.dirname(__file__), "metadata.json")
@@ -49,9 +50,14 @@ def _load_yelp_business_lookup():
     """Load business data into a dict keyed by business_id."""
     print("  Loading Yelp business lookup...")
     lookup = {}
+    bad_lines = 0
     with open(YELP_BUSINESS_PATH, "r", encoding="utf-8") as f:
         for line in f:
-            row = json.loads(line)
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                bad_lines += 1
+                continue
             lookup[row["business_id"]] = {
                 "name": row.get("name", "Unknown Business"),
                 "address": row.get("address", ""),
@@ -61,17 +67,29 @@ def _load_yelp_business_lookup():
                 "stars": row.get("stars"),
                 "review_count": row.get("review_count"),
             }
+    if bad_lines:
+        print(f"  WARNING: Skipped {bad_lines} malformed business lines.")
     print(f"  Loaded {len(lookup)} businesses.")
     return lookup
 
 
-def _load_yelp_user_lookup():
+def _load_yelp_user_lookup(min_reviews=MIN_REVIEWS_PER_USER):
     """Load user data into a dict keyed by user_id (excluding friends list)."""
-    print("  Loading Yelp user lookup...")
+    print(f"  Loading Yelp user lookup (filtering for review_count >= {min_reviews})...")
     lookup = {}
+    bad_lines = 0
     with open(YELP_USER_PATH, "r", encoding="utf-8") as f:
         for line in f:
-            row = json.loads(line)
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                bad_lines += 1
+                continue
+            
+            # Memory optimization: Skip users with fewer than min_reviews
+            if row.get("review_count", 0) < min_reviews:
+                continue
+
             lookup[row["user_id"]] = {
                 "name": row.get("name", ""),
                 "review_count": row.get("review_count", 0),
@@ -94,7 +112,9 @@ def _load_yelp_user_lookup():
                 "compliment_writer": row.get("compliment_writer", 0),
                 "compliment_photos": row.get("compliment_photos", 0),
             }
-    print(f"  Loaded {len(lookup)} users.")
+    if bad_lines:
+        print(f"  WARNING: Skipped {bad_lines} malformed user lines.")
+    print(f"  Loaded {len(lookup)} active users.")
     return lookup
 
 
@@ -103,7 +123,7 @@ def load_yelp(cap):
 
     # Build lookup dicts first
     biz_lookup = _load_yelp_business_lookup()
-    user_lookup = _load_yelp_user_lookup()
+    user_lookup = _load_yelp_user_lookup(min_reviews=MIN_REVIEWS_PER_USER)
 
     records = []
     user_counter = defaultdict(int)
@@ -114,7 +134,15 @@ def load_yelp(cap):
         for i, line in enumerate(f):
             if cap and i >= cap:
                 break
-            row = json.loads(line)
+            
+            if i % 250000 == 0 and i > 0:
+                print(f"    Processed {i:,} review lines (current matched: {len(records):,})...")
+                
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                skipped += 1
+                continue
 
             uid = row.get("user_id", "")
             bid = row.get("business_id", "")
@@ -184,6 +212,7 @@ def load_yelp(cap):
     # Free lookup dicts to reclaim memory
     del biz_lookup
     del user_lookup
+    gc.collect()
 
     print(f"  Built {len(records)} records, skipped {skipped} unresolvable/empty reviews.")
     return records, user_counter
@@ -375,14 +404,44 @@ def build_embed_text(record):
 def embed_texts(texts, batch_size=64, num_processes=None, embed_chunk_size=5000):
     """
     Embed texts with sentence-transformers.
-    Uses all available CPU cores by default via multiprocessing.
+    Automatically uses GPU (CUDA/MPS) if available, otherwise falls back to CPU multi-processing.
     """
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+
+    print(f"Selected device for embedding: {device}")
+
+    # If GPU is available, run single-process GPU encoding (highly optimized) in chunks to avoid tokenizer bottlenecks
+    if device != "cpu":
+        model = SentenceTransformer(EMBED_MODEL, device=device)
+        total_texts = len(texts)
+        gpu_chunk_size = min(total_texts, max(embed_chunk_size, 100000))
+        total_chunks = (total_texts + gpu_chunk_size - 1) // gpu_chunk_size
+        embeddings_parts = []
+
+        print(f"Embedding on GPU ({device}) in {total_chunks} chunks of size {gpu_chunk_size}...")
+        for chunk_index, start in enumerate(range(0, total_texts, gpu_chunk_size), 1):
+            end = min(start + gpu_chunk_size, total_texts)
+            print(f"Embedding GPU chunk {chunk_index}/{total_chunks} (rows {start + 1}-{end} of {total_texts})...")
+            chunk_embeddings = model.encode(
+                texts[start:end],
+                batch_size=batch_size,
+                show_progress_bar=True,
+            )
+            embeddings_parts.append(np.array(chunk_embeddings, dtype="float32"))
+        return np.vstack(embeddings_parts).astype("float32")
+
+    # Fallback to CPU multi-processing
     cpu_count = os.cpu_count() or 1
     if num_processes is None:
         num_processes = cpu_count
     num_processes = max(1, int(num_processes))
 
-    model = SentenceTransformer(EMBED_MODEL)
+    model = SentenceTransformer(EMBED_MODEL, device="cpu")
 
     if num_processes == 1:
         try:
@@ -422,6 +481,7 @@ def embed_texts(texts, batch_size=64, num_processes=None, embed_chunk_size=5000)
         model.stop_multi_process_pool(pool)
 
     return np.vstack(embeddings_parts).astype("float32")
+
 
 
 def ingest(

@@ -205,11 +205,30 @@ def get_history(session_id: str):
     if session_id not in agent.sessions:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
     state = agent.sessions[session_id]
+    
+    recommendations = [
+        RecommendationItem(
+            rank=r["rank"],
+            item_name=r["item_name"],
+            platform=r["platform"],
+            item_category=r["item_category"],
+            avg_rating=r["avg_rating"],
+            match_reason=r["match_reason"],
+            item_id=r.get("item_id"),
+            review_count=r.get("review_count", 0),
+            top_keywords=r.get("top_keywords", []),
+            item_metadata=r.get("item_metadata", {}),
+        )
+        for r in state.current_recommendations
+    ]
+    
     return {
         "session_id": session_id,
         "turn_number": state.turn_number,
         "onboarding_complete": state.onboarding_complete,
         "conversation_history": state.conversation_history,
+        "current_recommendations": recommendations,
+        "nigerian_context": state.nigerian_context,
     }
 
 

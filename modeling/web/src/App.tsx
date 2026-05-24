@@ -2,17 +2,12 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AlertCircle,
   ArrowRight,
-  BookOpen,
   CheckCircle2,
-  ChevronRight,
-  Globe,
   Loader2,
   RefreshCw,
   Search,
-  ShoppingBag,
   Sparkles,
   Star,
-  Utensils,
 } from "lucide-react";
 
 import heroArtwork from "./assets/hero.png";
@@ -78,6 +73,11 @@ interface RetrievedReview {
   rating: number;
   platform: string;
   item_metadata?: Record<string, unknown>;
+  user_name?: string;
+  timestamp?: string;
+  review_useful?: number;
+  review_funny?: number;
+  review_cool?: number;
 }
 
 interface UserProfile {
@@ -86,6 +86,13 @@ interface UserProfile {
   typical_review_length: string;
   common_themes: string[];
   total_reviews: number;
+  user_name?: string;
+  is_elite?: boolean;
+  elite_years?: string[];
+  fan_count?: number;
+  yelping_since?: string;
+  avg_engagement?: number;
+  top_compliment?: string;
 }
 
 interface SimulateResponse {
@@ -100,6 +107,7 @@ interface SimulateResponse {
 interface UserSelectorItem {
   composite_user_id: string;
   review_count: number;
+  user_name?: string;
 }
 
 function friendlyLabel(value: string) {
@@ -114,31 +122,7 @@ function platformLabel(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
 
-function platformHint(value: string) {
-  switch (value.toLowerCase()) {
-    case "yelp":
-      return "Dining and local places";
-    case "amazon":
-      return "Shopping";
-    case "goodreads":
-      return "Books";
-    default:
-      return "Everyday choices";
-  }
-}
 
-function platformIcon(value: string) {
-  switch (value.toLowerCase()) {
-    case "yelp":
-      return <Utensils className="platform-icon" />;
-    case "amazon":
-      return <ShoppingBag className="platform-icon" />;
-    case "goodreads":
-      return <BookOpen className="platform-icon" />;
-    default:
-      return <Globe className="platform-icon" />;
-  }
-}
 
 function priceLabel(value: string) {
   return PRICE_OPTIONS.find((option) => option.value === value)?.label ?? value;
@@ -213,11 +197,13 @@ function Stars({ rating }: { rating: number }) {
 }
 
 export default function App() {
-  const [platforms, setPlatforms] = useState<string[]>([]);
-  const [selectedPlatform, setSelectedPlatform] = useState<string>("");
+  const [selectedPlatform, setSelectedPlatform] = useState<string>("yelp");
   const [users, setUsers] = useState<UserSelectorItem[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [selectedUserId, setSelectedUserId] = useState<string>("default");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("");
+  const [page, setPage] = useState<number>(1);
+  const [totalUsers, setTotalUsers] = useState<number>(0);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [message, setMessage] = useState("");
@@ -231,28 +217,30 @@ export default function App() {
 
   const [result, setResult] = useState<SimulateResponse | null>(null);
 
+  // Debounce search query changes
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+
+
   useEffect(() => {
     void fetchPlatforms();
   }, []);
 
   useEffect(() => {
     if (selectedPlatform) {
-      void fetchUsers(selectedPlatform);
+      void fetchUsers(selectedPlatform, page, debouncedSearchQuery);
     }
-  }, [selectedPlatform]);
+  }, [selectedPlatform, page, debouncedSearchQuery]);
 
   const selectedUser = useMemo(
     () => users.find((user) => user.composite_user_id === selectedUserId),
     [users, selectedUserId],
   );
-
-  const filteredUsers = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return users;
-    return users.filter((user) =>
-      friendlyLabel(user.composite_user_id).toLowerCase().includes(query),
-    );
-  }, [users, searchQuery]);
 
   async function fetchPlatforms() {
     try {
@@ -264,11 +252,9 @@ export default function App() {
 
       const data = (await response.json()) as { platforms?: string[] };
       const list = data.platforms?.length ? data.platforms : FALLBACK_PLATFORMS;
-      setPlatforms(list);
       setSelectedPlatform((current) => current || list[0]);
     } catch (error) {
       console.error(error);
-      setPlatforms(FALLBACK_PLATFORMS);
       setSelectedPlatform((current) => current || FALLBACK_PLATFORMS[0]);
       setMessage(
         `We could not reach the local preview server at ${API_BASE}. Some choices may still load once it is back online.`,
@@ -276,13 +262,14 @@ export default function App() {
     }
   }
 
-  async function fetchUsers(platform: string) {
+  async function fetchUsers(platform: string, pageNum: number, searchQ: string) {
     setLoadingUsers(true);
     setMessage("");
 
     try {
+      const qParam = searchQ.trim() ? `&q=${encodeURIComponent(searchQ.trim())}` : "";
       const response = await fetch(
-        `${API_BASE}/users?platform=${encodeURIComponent(platform)}&limit=50`,
+        `${API_BASE}/users?platform=${encodeURIComponent(platform)}&page=${pageNum}&limit=15${qParam}`,
       );
       if (!response.ok) {
         throw new Error(`Could not load people for ${platform}`);
@@ -290,19 +277,25 @@ export default function App() {
 
       const data = (await response.json()) as {
         users?: UserSelectorItem[];
+        total?: number;
       };
       const list = data.users ?? [];
       setUsers(list);
+      setTotalUsers(data.total ?? 0);
 
       setSelectedUserId((current) => {
         if (current && list.some((user) => user.composite_user_id === current)) {
           return current;
         }
-        return list[0]?.composite_user_id ?? "";
+        if (pageNum === 1 && list.length > 0) {
+          return list[0].composite_user_id;
+        }
+        return current || (list[0]?.composite_user_id ?? "");
       });
     } catch (error) {
       console.error(error);
       setUsers([]);
+      setTotalUsers(0);
       setSelectedUserId("");
       setMessage(
         `We could not load the people list for ${platformLabel(platform)} right now.`,
@@ -477,41 +470,8 @@ export default function App() {
               <div className="section-head">
                 <span className="step-number">1</span>
                 <div>
-                  <h2>Choose a place</h2>
-                  <p>Start with the place that fits your scenario.</p>
-                </div>
-              </div>
-
-              <div className="platform-list" role="list" aria-label="Choose a place">
-                {(platforms.length ? platforms : FALLBACK_PLATFORMS).map((platform) => {
-                  const active = selectedPlatform === platform;
-                  return (
-                    <button
-                      key={platform}
-                      type="button"
-                      className={`platform-button${active ? " is-active" : ""}`}
-                      onClick={() => {
-                        setSearchQuery("");
-                        setResult(null);
-                        setSelectedPlatform(platform);
-                      }}
-                    >
-                      <span className="platform-icon-wrap">{platformIcon(platform)}</span>
-                      <span className="platform-copy">
-                        <strong>{platformLabel(platform)}</strong>
-                        <span>{platformHint(platform)}</span>
-                      </span>
-                      <ChevronRight className="platform-arrow" />
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="section-head section-head-spaced">
-                <span className="step-number">2</span>
-                <div>
-                  <h2>Pick a person</h2>
-                  <p>Search by the person’s label or id fragment.</p>
+                  <h2>Pick a reviewer</h2>
+                  <p>Search by name or id fragment to select a voice.</p>
                 </div>
               </div>
 
@@ -520,15 +480,18 @@ export default function App() {
                 <input
                   type="search"
                   value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search the list"
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search reviewer names or IDs..."
                 />
               </label>
 
               <div className="user-meta">
-                <span>{users.length || "No"} people available</span>
+                <span>{totalUsers || "No"} reviewers found</span>
                 {selectedUser ? (
-                  <span>Selected: {friendlyLabel(selectedUser.composite_user_id)}</span>
+                  <span>Selected: {selectedUser.user_name || friendlyLabel(selectedUser.composite_user_id)}</span>
                 ) : null}
               </div>
 
@@ -536,10 +499,10 @@ export default function App() {
                 {loadingUsers ? (
                   <div className="empty-state">
                     <Loader2 className="spin-icon" />
-                    <p>Loading people…</p>
+                    <p>Loading reviewers…</p>
                   </div>
-                ) : filteredUsers.length ? (
-                  filteredUsers.map((user) => {
+                ) : users.length ? (
+                  users.map((user) => {
                     const active = user.composite_user_id === selectedUserId;
                     return (
                       <button
@@ -552,9 +515,9 @@ export default function App() {
                         }}
                       >
                         <span className="user-name">
-                          {friendlyLabel(user.composite_user_id)}
+                          {user.user_name || friendlyLabel(user.composite_user_id)}
                         </span>
-                        <span className="user-count">{user.review_count} examples</span>
+                        <span className="user-count">{user.review_count} reviews</span>
                       </button>
                     );
                   })
@@ -564,6 +527,32 @@ export default function App() {
                   </div>
                 )}
               </div>
+
+              {totalUsers > 15 && (
+                <div className="pagination-controls" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem', padding: '0 0.25rem' }}>
+                  <button
+                    type="button"
+                    className="preset-button"
+                    style={{ margin: 0, padding: '0.5rem 1rem', width: 'auto', flex: '0 0 auto' }}
+                    disabled={page === 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    Previous
+                  </button>
+                  <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                    Page {page} of {Math.ceil(totalUsers / 15)}
+                  </span>
+                  <button
+                    type="button"
+                    className="preset-button"
+                    style={{ margin: 0, padding: '0.5rem 1rem', width: 'auto', flex: '0 0 auto' }}
+                    disabled={page >= Math.ceil(totalUsers / 15)}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
 
               <div className="preset-box">
                 <div className="section-head preset-head">
@@ -593,7 +582,7 @@ export default function App() {
           <section className="panel content-panel">
             <div className="panel-inner">
               <div className="section-head">
-                <span className="step-number">3</span>
+                <span className="step-number">2</span>
                 <div>
                   <h2>Describe what they are looking at</h2>
                   <p>Keep it simple. The form only asks for what matters.</p>
@@ -698,7 +687,7 @@ export default function App() {
 
               <div className="preview-card">
                 <div className="section-head section-head-spaced">
-                  <span className="step-number">4</span>
+                  <span className="step-number">3</span>
                   <div>
                     <h2>Your preview</h2>
                     <p>A clear, readable outcome once the form is submitted.</p>
@@ -746,6 +735,45 @@ export default function App() {
                       <p>“{result.simulated_review}”</p>
                     </section>
 
+                    {result.user_profile.user_name && (
+                      <section className="quote-card" style={{ borderLeft: '4px solid #f43f5e', background: 'rgba(244, 63, 94, 0.03)' }}>
+                        <span className="result-label" style={{ color: '#f43f5e' }}>Reviewer: {result.user_profile.user_name}</span>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.5rem' }}>
+                          {result.user_profile.is_elite && (
+                            <span className="tone tone-positive" style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                              👑 Elite ({result.user_profile.elite_years?.length} years, since {
+                                result.user_profile.elite_years && result.user_profile.elite_years.length > 0 ? 
+                                Math.min(...result.user_profile.elite_years.map(y => {
+                                  const val = parseInt(y);
+                                  return isNaN(val) ? 9999 : (val < 100 ? val + 2000 : val);
+                                })) : '2009'
+                              })
+                            </span>
+                          )}
+                          {result.user_profile.fan_count !== undefined && result.user_profile.fan_count > 0 && (
+                            <span className="tone tone-balanced" style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
+                              ❤️ {result.user_profile.fan_count} Fans
+                            </span>
+                          )}
+                          {result.user_profile.yelping_since && (
+                            <span className="tone tone-consistent" style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
+                              📅 Member since {result.user_profile.yelping_since}
+                            </span>
+                          )}
+                          {result.user_profile.top_compliment && (
+                            <span className="tone tone-consistent" style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', textTransform: 'capitalize' }}>
+                              🏆 Top Compliment: {result.user_profile.top_compliment}
+                            </span>
+                          )}
+                          {result.user_profile.avg_engagement !== undefined && result.user_profile.avg_engagement > 0 && (
+                            <span className="tone tone-consistent" style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
+                              💬 Avg Engagement: {result.user_profile.avg_engagement.toFixed(1)} / review
+                            </span>
+                          )}
+                        </div>
+                      </section>
+                    )}
+
                     <section className="insight-grid">
                       <article className="insight-card">
                         <span className="result-label">Style</span>
@@ -782,24 +810,61 @@ export default function App() {
                       </div>
 
                       <div className="example-list">
-                        {result.retrieved_reviews_used.map((review, index) => (
-                          <article key={`${review.item_name}-${index}`} className="example-card">
-                            <div className="example-top">
-                              <div>
-                                <span className="example-source">
-                                  {platformLabel(review.platform)}
-                                </span>
-                                <h4>{review.item_name}</h4>
-                                <p>{review.item_category}</p>
+                        {result.retrieved_reviews_used.map((review, index) => {
+                          const itemMeta = review.item_metadata || {};
+                          const city = itemMeta.city as string | undefined;
+                          const state = itemMeta.state as string | undefined;
+                          const locationStr = city ? `📍 ${city}${state ? `, ${state}` : ''}` : '';
+                          
+                          let formattedDate = '';
+                          if (review.timestamp) {
+                            try {
+                              formattedDate = new Date(review.timestamp).toLocaleDateString(undefined, {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                              });
+                            } catch {
+                              formattedDate = review.timestamp;
+                            }
+                          }
+
+                          return (
+                            <article key={`${review.item_name}-${index}`} className="example-card">
+                              <div className="example-top">
+                                <div>
+                                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                    <span className="example-source">
+                                      {platformLabel(review.platform)}
+                                    </span>
+                                    {locationStr && (
+                                      <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                                        {locationStr}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <h4>{review.item_name}</h4>
+                                  <p>{review.item_category}</p>
+                                </div>
+                                <div className="example-rating">
+                                  <Stars rating={review.rating} />
+                                  <strong>{review.rating.toFixed(1)}</strong>
+                                </div>
                               </div>
-                              <div className="example-rating">
-                                <Stars rating={review.rating} />
-                                <strong>{review.rating.toFixed(1)}</strong>
-                              </div>
-                            </div>
-                            <p className="example-quote">“{review.review_text}”</p>
-                          </article>
-                        ))}
+                              <p className="example-quote">“{review.review_text}”</p>
+                              {(review.review_useful || review.review_funny || review.review_cool || formattedDate) ? (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', fontSize: '0.75rem', opacity: 0.7, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
+                                  {formattedDate && <span>📅 {formattedDate}</span>}
+                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    {review.review_useful ? <span>👍 {review.review_useful} Useful</span> : null}
+                                    {review.review_funny ? <span>😄 {review.review_funny} Funny</span> : null}
+                                    {review.review_cool ? <span>😎 {review.review_cool} Cool</span> : null}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </article>
+                          );
+                        })}
                       </div>
                     </section>
                   </div>
@@ -808,8 +873,7 @@ export default function App() {
                     <Sparkles className="empty-icon" />
                     <strong>Ready when you are</strong>
                     <p>
-                      Pick a place, choose a person, and add a few details to see the
-                      preview appear here.
+                      Pick a reviewer, describe the item, and click Show preview to see the results here.
                     </p>
                   </div>
                 )}

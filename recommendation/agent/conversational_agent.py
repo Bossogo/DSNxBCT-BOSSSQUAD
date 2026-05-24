@@ -337,14 +337,14 @@ class ConversationalAgent:
 they will love based on their preferences and history.
 
 IMPORTANT CATALOG CONTEXT:
-The current recommendation catalog contains ONLY Beauty & Skincare products from Amazon.
-There are NO Food/Restaurant items, NO Book items, and NO Yelp or Goodreads items available.
-If the user asks for food, restaurants, books, or mentions Yelp/Goodreads:
+The recommendation catalog contains local businesses and services from Yelp (including restaurants, food, cafes, beauty salons, spas, home decor, and other local businesses).
+There are NO Amazon products or Goodreads books available in this catalog version.
+If the user asks for Amazon products or Goodreads books:
 - Acknowledge their interest warmly.
-- Explain that your catalog currently focuses on Beauty & Skincare products.
-- Offer to show them the best beauty/skincare products that match their other preferences (e.g., budget, quality, ingredients).
-- NEVER pretend to have food/book/restaurant items. NEVER invent or hallucinate items from platforms that are not in the catalog.
-- NEVER tell the user to "search online" or "check Yelp" — you are the recommendation assistant, not a search engine.
+- Explain that your catalog currently focuses on Yelp local businesses and services.
+- Offer to show them the best local businesses, dining spots, or beauty services that match their preferences.
+- NEVER pretend to have Amazon products or Goodreads books. NEVER invent or hallucinate items from platforms that are not in the catalog.
+- NEVER tell the user to "search online" — you are the recommendation assistant, not a search engine.
 
 Before every response you must reason internally using this structure:
 
@@ -353,7 +353,7 @@ Before every response you must reason internally using this structure:
 2. How does this change or refine their preference profile?
 3. Should I re-rank, filter, or expand the current recommendations?
 4. What is the most helpful thing to say to this user right now?
-If you detect the user wants to apply or change filters, include a <filter_update> tag here with a JSON object, e.g. <filter_update>{"item_category": "Book"}</filter_update>, <filter_update>{"exclude_platform": "yelp"}</filter_update>, or <filter_update>{"reset": true}</filter_update>.
+If you detect the user wants to apply or change filters, include a <filter_update> tag here with a JSON object, e.g. <filter_update>{"item_category": "Food"}</filter_update>, <filter_update>{"exclude_platform": "yelp"}</filter_update>, or <filter_update>{"reset": true}</filter_update>.
 </reasoning>
 
 <response>
@@ -413,9 +413,9 @@ Rules:
         if filters_relaxed:
             catalog_note = (
                 "\n[SYSTEM NOTE: The user's requested category or platform is not available in the current catalog. "
-                "The filters have been relaxed to show the best available Beauty & Skincare items instead. "
+                "The filters have been relaxed to show the best available Yelp local businesses instead. "
                 "Explain this warmly to the user — let them know the catalog currently focuses on "
-                "Beauty & Skincare products and show them the best matches from what is available. "
+                "Yelp local businesses (like dining, restaurants, cafes, salons, and local services) and show them the best matches from what is available. "
                 "Do NOT apologize excessively or say 'no recommendations'. Present the available items positively.]\n"
             )
 
