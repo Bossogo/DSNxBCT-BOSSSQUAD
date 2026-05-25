@@ -80,7 +80,7 @@ class SimulateResponse(BaseModel):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {"message": "User Modeling Agent is running. See /docs for API reference."}
 

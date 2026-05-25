@@ -107,7 +107,7 @@ def expire_old_sessions():
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {
         "message": "Recommendation Agent is running. See /docs for API reference."
